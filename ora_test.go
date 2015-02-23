@@ -2,12 +2,13 @@ package ora
 
 import (
 	"database/sql"
+	"fmt"
 	"github.com/jzaikovs/clitable"
 	"testing"
 )
 
 var (
-	DB_ACCESS = "ora_go_test/ora_go_test_password@//192.168.1.120:1521/XE"
+	DB_ACCESS = "ora_go_test/ora_go_test_password@//oracle:1521/XE"
 )
 
 /*
@@ -39,10 +40,15 @@ func TestExec(t *testing.T) {
 	stmt, err := db.Prepare("insert into go_test values(:1, :2)")
 	if err != nil {
 		t.Error(err)
-	}
+	} else {
+		for i := 0; i < 5; i++ {
+			if _, err = stmt.Exec(i, "#"+fmt.Sprint(i)); err != nil {
+				t.Error(err)
+				break
+			}
+		}
 
-	for i := 0; i < 5; i++ {
-		if _, err = stmt.Exec(i, "?"); err != nil {
+		if err = stmt.Close(); err != nil {
 			t.Error(err)
 		}
 	}
@@ -100,7 +106,7 @@ func TestExec(t *testing.T) {
 }
 
 func TestDatabase(t *testing.T) {
-	db, err := sql.Open("ora", "jp/parole@//192.168.1.120:1521/XE")
+	db, err := sql.Open("ora", DB_ACCESS)
 	if err != nil {
 		t.Error(err)
 		return
@@ -117,16 +123,6 @@ func TestDatabase(t *testing.T) {
 		return
 	}
 
-	if rows, err = db.Query("select id, login, full_name, block_status, rowid from users where  rownum < 10"); err != nil {
-		t.Error(err)
-		return
-	}
-
-	if err = clitable.Print(rows); err != nil {
-		t.Error(err)
-		return
-	}
-
 	if err = db.Close(); err != nil {
 		t.Error(err)
 		return
@@ -134,7 +130,7 @@ func TestDatabase(t *testing.T) {
 }
 
 func TestErrors(t *testing.T) {
-	db, err := sql.Open("ora", "jp/parole@//192.168.1.120:1521/XE")
+	db, err := sql.Open("ora", DB_ACCESS)
 	if err != nil {
 		t.Error(err)
 		return
@@ -150,7 +146,7 @@ func TestErrors(t *testing.T) {
 
 func BenchmarkQuery(b *testing.B) {
 	b.StopTimer()
-	db, err := sql.Open("ora", "jp/parole@//192.168.1.120:1521/XE")
+	db, err := sql.Open("ora", DB_ACCESS)
 	if err != nil {
 		b.Error(err)
 		return

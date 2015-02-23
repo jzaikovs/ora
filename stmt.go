@@ -94,7 +94,7 @@ func (self *t_stmt) Query(args []driver.Value) (driver.Rows, error) {
 	d := new_desc(self)
 	parm_status, _, _ := oci_OCIParamGet.Call(self.ptr, OCI_HTYPE_STMT, self.conn.err.ptr, ref(&d.ptr), uintptr(len(descrs)+1))
 
-	for parm_status == 0 { // oci_success
+	for parm_status == OCI_SUCCESS { // oci_success
 		columns = append(columns, d.name())
 
 		var err error

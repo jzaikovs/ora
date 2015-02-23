@@ -17,10 +17,10 @@ func (self *t_rows) Next(dest []driver.Value) (err error) {
 	// 1. fetch result in result binds, TODO: manipulate fetch_size
 	ret, _, _ := oci_OCIStmtFetch2.Call(self.stmt.ptr, self.stmt.conn.err.ptr, 1, OCI_DEFAULT, 0, OCI_DEFAULT)
 	switch int16(ret) {
+	case OCI_SUCCESS:
+		// skip
 	case OCI_NO_DATA:
 		return sql.ErrNoRows
-	case 0:
-		// skip
 	default:
 		if err = self.stmt.conn.cerr(ret, 0, nil); err != nil {
 			return

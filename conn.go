@@ -112,23 +112,21 @@ func (self *t_conn) env_err(r uintptr, r2 uintptr, err error) error {
 
 // http://docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci17msc007.htm#LNOCI17287
 func (self *t_conn) on_oci_return(code int16, htyp int) error {
-	//logLine(code)
-
 	switch code {
 	case OCI_SUCCESS:
 		return nil
 	case OCI_ERROR:
 		return self.error_get(htyp)
 	case OCI_INVALID_HANDLE:
-		//panic("invalid_handle")
 		return errors.New("OCI call returned OCI_INVALID_HANDLE")
 	}
 
 	return errors.New(fmt.Sprintf("OCI call returned - %d", code))
 }
 
+// https://docs.oracle.com/database/121/LNOCI/oci17msc007.htm#LNOCI17287
 func (self *t_conn) error_get(htyp int) error {
-	buf := make([]byte, 4000)
+	buf := make([]byte, 3072) // OCI_ERROR_MAXMSG_SIZE2 3072
 	errcode := 0
 	if htyp == OCI_HTYPE_ERROR {
 		if err := self.cerr(oci_OCIErrorGet.Call(self.err.ptr, uintptr(1), uintptr(0), int_ref(&errcode), buf_addr(buf), uintptr(len(buf)), OCI_HTYPE_ERROR)); err != nil {
