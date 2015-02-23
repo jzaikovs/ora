@@ -12,14 +12,15 @@ type t_descriptor struct {
 	val_ptr interface{}
 }
 
-func new_desc(stmt *t_stmt) t_descriptor {
-	return t_descriptor{
+func new_desc(stmt *t_stmt) *t_descriptor {
+	return &t_descriptor{
 		stmt: stmt,
 		_len: -1,
+		_typ: -1,
 	}
 }
 
-func (self t_descriptor) typ() (t int) {
+func (self *t_descriptor) typ() (t int) {
 	if self._typ > 0 {
 		return self._typ
 	}
@@ -28,10 +29,11 @@ func (self t_descriptor) typ() (t int) {
 	if err != nil {
 		panic(err)
 	}
+	self._typ = t
 	return
 }
 
-func (self t_descriptor) name() string {
+func (self *t_descriptor) name() string {
 	if len(self._name) > 0 {
 		return self._name
 	}
@@ -42,11 +44,11 @@ func (self t_descriptor) name() string {
 	if err != nil {
 		panic(err)
 	}
-
-	return string(name[:name_len])
+	self._name = string(name[:name_len])
+	return self._name
 }
 
-func (self t_descriptor) len() int {
+func (self *t_descriptor) len() int {
 	if self._len >= 0 {
 		return self._len
 	}
@@ -69,7 +71,7 @@ func (self t_descriptor) len() int {
 			panic(err)
 		}
 	}
-
+	self._len = w
 	return w
 }
 

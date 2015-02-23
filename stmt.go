@@ -73,30 +73,40 @@ func (self *t_stmt) Query(args []driver.Value) (driver.Rows, error) {
 		return nil, err
 	}
 
-	columns := make([]string, 0)      // collect all columns names we will need them for database/sql
-	descrs := make([]t_descriptor, 0) // collect all desciption handles we will need them to fetch row
+	columns := make([]string, 0)       // collect all columns names we will need them for database/sql
+	descrs := make([]*t_descriptor, 0) // collect all desciption handles we will need them to fetch row
 
 	// http://web.stanford.edu/dept/itss/docs/oracle/10gR2/appdev.102/b14250/oci04sql.htm#sthref629
 	d := new_desc(self)
 	parm_status, _, _ := oci_OCIParamGet.Call(self.ptr, OCI_HTYPE_STMT, self.conn.err.ptr, ref(&d.ptr), uintptr(len(descrs)+1))
 
 	for parm_status == 0 { // oci_success
-		d._name = d.name()
-		d._len = d.len()
-		d._typ = d.typ()
-
 		columns = append(columns, d.name())
+
+		var err error
+		pos := uintptr(len(descrs) + 1)
 
 		switch d.typ() {
 		case OCI_TYP_ROWID:
-			d.val_ptr = make([]byte, 18)
+			buf := make([]byte, 18)
+			d.val_ptr = buf
+			err = self.conn.cerr(oci_OCIDefineByPos.Call(self.ptr, ref(&d.ptr), self.conn.err.ptr, pos, buf_addr(buf), 18, SQLT_AFC, int_ref(&d.ind), 0, 0, 0))
 		case OCI_TYP_VARCHAR, OCI_TYP_CHAR:
-			d.val_ptr = make([]byte, d.len()+1)
+			buf := make([]byte, d.len()+1)
+			d.val_ptr = buf
+			err = self.conn.cerr(oci_OCIDefineByPos.Call(self.ptr, ref(&d.ptr), self.conn.err.ptr, pos, buf_addr(buf), uintptr(len(buf)), SQLT_STR, int_ref(&d.ind), 0, 0, 0))
 		case OCI_TYP_NUMBER:
 			x := float64(0)
 			d.val_ptr = &x
+			err = self.conn.cerr(oci_OCIDefineByPos.Call(self.ptr, ref(&d.ptr), self.conn.err.ptr, pos, float64_ref(d.val_ptr.(*float64)), 8, SQLT_FLT, int_ref(&d.ind), 0, 0, 0))
 		case OCI_TYP_DATE:
-			d.val_ptr = make([]byte, d.len())
+			buf := make([]byte, d.len())
+			d.val_ptr = buf
+			err = self.conn.cerr(oci_OCIDefineByPos.Call(self.ptr, ref(&d.ptr), self.conn.err.ptr, pos, buf_addr(buf), uintptr(len(buf)), SQLT_DAT, int_ref(&d.ind), 0, 0, 0))
+		}
+
+		if err != nil {
+			return nil, err
 		}
 
 		descrs = append(descrs, d)
