@@ -21,10 +21,6 @@ const (
 )
 
 const (
-	OCI_NO_DATA = 100
-)
-
-const (
 	OCI_DTYPE_PARAM = 53
 	OCI_DTYPE_ROWID = 54
 )
@@ -74,4 +70,17 @@ const (
 	SQLT_DAT = 12 // [7]byte
 	SQLT_AFC = 96 // [n]char
 	SQLT_RDD = 104
+)
+
+// http://docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci02bas.htm#LNOCI16220
+const (
+	OCI_SUCCESS           = 0
+	OCI_SUCCESS_WITH_INFO = 1
+	OCI_NO_DATA           = 100
+	OCI_ERROR             = -1
+	OCI_INVALID_HANDLE    = -2
+	OCI_NEED_DATA         = 99
+	OCI_STILL_EXECUTING   = -3123
+	OCI_CONTINUE          = -24200
+	OCI_ROWCBK_DONE       = -24201
 )

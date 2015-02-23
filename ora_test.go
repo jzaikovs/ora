@@ -6,42 +6,92 @@ import (
 	"testing"
 )
 
+var (
+	DB_ACCESS = "ora_go_test/ora_go_test_password@//192.168.1.120:1521/XE"
+)
+
+/*
+Setup for testing:
+```
+create user ora_go_test identified by ora_go_test_password;
+grant connect, resource to ora_go_test;
+```
+
+*/
+
 func TestExec(t *testing.T) {
-	db, err := sql.Open("ora", "jp/parole@//192.168.1.120:1521/XE")
+	db, err := sql.Open("ora", DB_ACCESS)
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	defer db.Close()
 
-	if _, err = db.Exec("create table go_test(id number)"); err != nil {
+	if _, err = db.Exec("create table go_test(id number, name varchar2(32))"); err != nil {
 		t.Error(err)
 		//return
 	}
 
-	if _, err = db.Exec("insert into go_test values(:1)", 1337); err != nil {
+	if _, err = db.Exec("insert into go_test values(:1, :2)", 1337, "leet"); err != nil {
 		t.Error(err)
 	}
 
-	stmt, err := db.Prepare("insert into go_test values(:1)")
+	stmt, err := db.Prepare("insert into go_test values(:1, :2)")
 	if err != nil {
 		t.Error(err)
 	}
 
 	for i := 0; i < 5; i++ {
-		stmt.Exec(i)
+		if _, err = stmt.Exec(i, "?"); err != nil {
+			t.Error(err)
+		}
 	}
 
-	r, err := db.Query("select rowid, id from go_test")
+	if _, err = db.Exec("delete go_test where id = :1", 2); err != nil {
+		t.Error(err)
+	}
+
+	if _, err = db.Exec("delete go_test where name = :1", "leet"); err != nil {
+		t.Error(err)
+	}
+
+	r, err := db.Query("select t.rowid, t.* from go_test t")
 	if err != nil {
 		t.Error(err)
+	} else {
+		if err = clitable.Print(r); err != nil {
+			t.Error(err)
+		}
 	}
 
-	clitable.Print(r)
-
-	if err = r.Close(); err != nil {
+	r, err = db.Query("SELECT column_name as name, nullable, concat(concat(concat(data_type,'('),data_length),')') as type FROM user_tab_columns WHERE table_name= upper(:1)", "go_test")
+	if err != nil {
 		t.Error(err)
+	} else {
+		if err = clitable.Print(r); err != nil {
+			t.Error(err)
+		}
 	}
+
+	/*
+		db2, err := sql.Open("ora", DB_ACCESS)
+		if err != nil {
+			t.Error(err)
+		}
+
+		r, err = db.Query("select * from v$session where username = user")
+		if err != nil {
+			t.Error(err)
+		} else {
+			if err = clitable.Print(r); err != nil {
+				t.Error(err)
+			}
+		}
+
+		if err = db2.Close(); err != nil {
+			t.Error(err)
+		}
+	*/
 
 	if _, err = db.Exec("drop table go_test"); err != nil {
 		t.Error(err)

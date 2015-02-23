@@ -7,18 +7,21 @@ import (
 
 type t_stmt struct {
 	*oci_handle
-	conn  *t_conn
-	binds []interface{} // after be we will holde pointers to every bind variable
+	conn   *t_conn
+	binds  []interface{} // will hold pointers to every bind variable
+	closed bool
 }
 
 func (self *t_stmt) Close() error {
-	//self.free()
+	if self.closed {
+		return nil
+	}
+	self.closed = true
 	return self.conn.cerr(oci_OCIStmtRelease.Call(self.ptr, self.conn.err.ptr, 0, 0, OCI_DEFAULT))
-	//return nil
 }
 
 func (self *t_stmt) NumInput() int {
-	return -1 // TODO: count input params
+	return -1 // TODO: count input parameters
 }
 
 func (self *t_stmt) Exec(args []driver.Value) (driver.Result, error) {
@@ -30,6 +33,12 @@ func (self *t_stmt) Exec(args []driver.Value) (driver.Result, error) {
 		return nil, err
 	}
 
+	// closing this is failing with invalid handle error,
+	// OCIStmtExecute on non SELECT will close handle, can't find info about this case
+	//if err := self.Close(); err != nil {
+	//	return nil, err
+	//}
+
 	return t_result{}, nil
 }
 
@@ -40,13 +49,18 @@ func (self *t_stmt) bind(args []driver.Value) (err error) {
 	for i, arg := range args {
 		var bnd uintptr
 		name := []byte(fmt.Sprintf(":%d", i+1))
+		n := uintptr(len(name))
 
 		// store pointer to val in binds because carbage collector will discard val
 		// and oci when we will execute, pased bind value will holde some random data from memory
 		switch val := arg.(type) { // GC will discard val if not referenced somewhere
 		case int64:
 			self.binds[i] = &val
-			err = self.conn.cerr(oci_OCIBindByName.Call(self.ptr, ref(&bnd), self.conn.err.ptr, buf_addr(name), uintptr(len(name)), int64_ref(&val), 8, SQLT_INT, 0, 0, 0, 0, 0, OCI_DEFAULT))
+			err = self.conn.cerr(oci_OCIBindByName.Call(self.ptr, ref(&bnd), self.conn.err.ptr, buf_addr(name), n, int64_ref(&val), 8, SQLT_INT, 0, 0, 0, 0, 0, OCI_DEFAULT))
+		case string:
+			buf := append([]byte(val), 0)
+			self.binds[i] = buf
+			err = self.conn.cerr(oci_OCIBindByName.Call(self.ptr, ref(&bnd), self.conn.err.ptr, buf_addr(name), n, buf_addr(buf), uintptr(len(buf)), SQLT_STR, 0, 0, 0, 0, 0, OCI_DEFAULT))
 		}
 
 		if err != nil {

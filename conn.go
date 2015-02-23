@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"errors"
+	"fmt"
 )
 
 type t_conn struct {
@@ -99,36 +100,45 @@ func (self *t_conn) alloc_descr() *oci_handle {
 }
 */
 
-// function for hanling errors from oci calls
+// function for handling errors from OCI calls
 func (self *t_conn) cerr(r uintptr, r2 uintptr, err error) error {
-	if r > 0 {
-		return self.handle_error()
-	}
-	return nil
+	return self.on_oci_return(int16(r), OCI_HTYPE_ERROR)
 }
 
-// functin for handling erros on env create and alloc
+// function for handling errors on env create and alloc
 func (self *t_conn) env_err(r uintptr, r2 uintptr, err error) error {
-	if r > 0 {
-		return self.handle_error()
-	}
-	return nil
+	return self.on_oci_return(int16(r), OCI_HTYPE_ENV)
 }
 
-func (self *t_conn) handle_error() error {
-	buf := make([]byte, 4000)
-	errcode := 0
-	if oci_OCIErrorGet.Call(self.err.ptr, uintptr(1), uintptr(0), int_ref(&errcode), buf_addr(buf), uintptr(len(buf)), OCI_HTYPE_ERROR); errcode > 0 {
-		return errors.New(string(buf[:bytes.IndexByte(buf, 0)]))
+// http://docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci17msc007.htm#LNOCI17287
+func (self *t_conn) on_oci_return(code int16, htyp int) error {
+	//logLine(code)
+
+	switch code {
+	case OCI_SUCCESS:
+		return nil
+	case OCI_ERROR:
+		return self.error_get(htyp)
+	case OCI_INVALID_HANDLE:
+		//panic("invalid_handle")
+		return errors.New("OCI call returned OCI_INVALID_HANDLE")
 	}
-	return nil
+
+	return errors.New(fmt.Sprintf("OCI call returned - %d", code))
 }
 
-func (self *t_conn) handle_env_error() error {
+func (self *t_conn) error_get(htyp int) error {
 	buf := make([]byte, 4000)
 	errcode := 0
-	if oci_OCIErrorGet.Call(self.env.ptr, uintptr(1), uintptr(0), int_ref(&errcode), buf_addr(buf), uintptr(len(buf)), OCI_HTYPE_ENV); errcode > 0 {
-		return errors.New(string(buf[:bytes.IndexByte(buf, 0)]))
+	if htyp == OCI_HTYPE_ERROR {
+		if err := self.cerr(oci_OCIErrorGet.Call(self.err.ptr, uintptr(1), uintptr(0), int_ref(&errcode), buf_addr(buf), uintptr(len(buf)), OCI_HTYPE_ERROR)); err != nil {
+			return err
+		}
+	} else {
+		if err := self.cerr(oci_OCIErrorGet.Call(self.env.ptr, uintptr(1), uintptr(0), int_ref(&errcode), buf_addr(buf), uintptr(len(buf)), OCI_HTYPE_ENV)); err != nil {
+			return err
+		}
 	}
-	return nil
+
+	return errors.New(string(buf[:bytes.IndexByte(buf, 0)]))
 }
