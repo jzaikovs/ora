@@ -3,11 +3,18 @@
 Oracle database driver for Go uses OCI
 
 For now it's only implements basic `database/sql/driver` interface.
- 
-* Works on windows with oracle instant client installed.
-* Add path to instant client in system variables PATH.
 
 For 64bit go you will need 64bit oracle instant client.
+
+# windows 
+
+* you will only need instant client installed
+* path to instant client should be in PATH system variables
+
+# linux
+
+* you will only need instant client installed
+* `sudo ldconfig -p | grep libclntsh` should return some lines
 
 ## usage
 
