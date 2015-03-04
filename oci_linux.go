@@ -11,7 +11,7 @@ type t_dll struct {
 func NewLazyDLL(name string) (dll *t_dll) {
 	dll = new(t_dll)
 	var err error
-	if dll.dll, err = dl.Open("libclntsh.so", dl.RTLD_LAZY); err != nil {
+	if dll.dll, err = dl.Open(name, dl.RTLD_LAZY); err != nil {
 		panic(err)
 	}
 	return
@@ -35,7 +35,7 @@ func (self t_callee) Call(args ...uintptr) (r1 uintptr, r2 uintptr, err error) {
 }
 
 var (
-	oci                    = NewLazyDLL("oci.dll")
+	oci                    = NewLazyDLL("libclntsh.so")
 	oci_OCIAttrGet         = oci.NewProc("OCIAttrGet")
 	oci_OCIAttrSet         = oci.NewProc("OCIAttrSet")
 	oci_OCIBindByName      = oci.NewProc("OCIBindByName")
