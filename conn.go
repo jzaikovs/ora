@@ -11,6 +11,7 @@ type t_conn struct {
 	env    *oci_handle
 	serv   *oci_handle
 	err    *oci_handle
+	tx     *t_tx
 	opened bool
 }
 
@@ -19,6 +20,7 @@ func new_conn() (*t_conn, error) {
 	conn := new(t_conn)
 	conn.env = &oci_handle{typ: OCI_HTYPE_ENV}
 
+	// TODO: OCI_THREADED
 	err := conn.env_err(oci_OCIEnvCreate.Call(conn.env.ref(), OCI_DEFAULT, 0, 0, 0, 0, 0, 0))
 	if err != nil {
 		return nil, err
@@ -36,7 +38,8 @@ func new_conn() (*t_conn, error) {
 }
 
 func (self *t_conn) Begin() (driver.Tx, error) {
-	return nil, nil // TODO: implement
+	self.tx = &t_tx{self}
+	return self.tx, nil
 }
 
 func (self *t_conn) Prepare(query string) (driver.Stmt, error) {
@@ -63,7 +66,7 @@ func (self *t_conn) Close() error {
 
 // function for creating statement
 func (self *t_conn) new_stmt() (stmt *t_stmt, err error) {
-	stmt = &t_stmt{conn: self}
+	stmt = &t_stmt{conn: self, tx: self.tx}
 	stmt.oci_handle, err = self.alloc(OCI_HTYPE_STMT) // allocate prepare statement, later we will need to free it
 	return
 }

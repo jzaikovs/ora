@@ -5,6 +5,8 @@ import (
 	"unsafe"
 )
 
+const sizeof_int = int(unsafe.Sizeof(int(0)))
+
 func logLine(args ...interface{}) {
 	log.Println(args...)
 }

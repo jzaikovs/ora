@@ -14,7 +14,8 @@ type t_rows struct {
 }
 
 func (self *t_rows) Next(dest []driver.Value) (err error) {
-	// 1. fetch result in result binds, TODO: manipulate fetch_size
+	// 1. fetch result in result binds,
+	// TODO: manipulate fetch_size - prefech
 	ret, _, _ := oci_OCIStmtFetch2.Call(self.stmt.ptr, self.stmt.conn.err.ptr, 1, OCI_DEFAULT, 0, OCI_DEFAULT)
 	switch int16(ret) {
 	case OCI_SUCCESS:
@@ -29,7 +30,7 @@ func (self *t_rows) Next(dest []driver.Value) (err error) {
 
 	// 2. store result from binds to destination values
 	for i, d := range self.descr {
-		switch d.typ() {
+		switch d.typ {
 		case OCI_TYP_ROWID:
 			dest[i] = string(d.val_ptr.([]byte))
 		case OCI_TYP_VARCHAR, OCI_TYP_CHAR:

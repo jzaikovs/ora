@@ -13,6 +13,12 @@ const (
 )
 
 const (
+	OCI_BATCH_MODE        = 0x1
+	OCI_COMMIT_ON_SUCCESS = 0x20
+	OCI_BATCH_ERRORS      = 0x80
+)
+
+const (
 	OCI_NTV_SYNTAX = 1
 )
 
@@ -48,7 +54,7 @@ const (
 	// working progress
 	OCI_TYP_CHAR = 96
 
-	// unsportod by this driver
+	// unsupported by this driver
 	OCI_TYP_LONG          = 8
 	OCI_TYP_RAW           = 23
 	OCI_TYP_LONG_RAW      = 24

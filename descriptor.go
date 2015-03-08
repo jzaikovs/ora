@@ -1,42 +1,30 @@
 package ora
 
+import (
+	"reflect"
+)
+
 // http://web.stanford.edu/dept/itss/docs/oracle/10gR2/appdev.102/b14250/oci04sql.htm#sthref629
 
 type t_descriptor struct {
-	stmt    *t_stmt
-	ptr     uintptr
-	_typ    int
-	_name   string
-	_len    int
-	ind     int
+	stmt    *t_stmt // statement, TODO: do we need this?
+	ptr     uintptr // pointer to descriptor allocation
+	typ     int
+	name    string
+	length  int
+	ind     int // indicator, used to determin if result is null value
 	val_ptr interface{}
 }
 
-func new_desc(stmt *t_stmt) *t_descriptor {
-	return &t_descriptor{
-		stmt: stmt,
-		_len: -1,
-		_typ: -1,
-	}
-}
-
-func (self *t_descriptor) typ() (t int) {
-	if self._typ > 0 {
-		return self._typ
-	}
-
+func (self *t_descriptor) getTyp() (t int) {
 	err := self.stmt.conn.cerr(oci_OCIAttrGet.Call(self.ptr, OCI_DTYPE_PARAM, int_ref(&t), 0, OCI_ATTR_DATA_TYPE, self.stmt.conn.err.ptr))
 	if err != nil {
 		panic(err)
 	}
-	self._typ = t
 	return
 }
 
-func (self *t_descriptor) name() string {
-	if len(self._name) > 0 {
-		return self._name
-	}
+func (self *t_descriptor) getName() string {
 	name := make([]byte, 32)
 	name_len := 0
 
@@ -44,15 +32,10 @@ func (self *t_descriptor) name() string {
 	if err != nil {
 		panic(err)
 	}
-	self._name = string(name[:name_len])
-	return self._name
+	return string(name[:name_len])
 }
 
-func (self *t_descriptor) len() int {
-	if self._len >= 0 {
-		return self._len
-	}
-
+func (self *t_descriptor) getLen() int {
 	sem := 0
 	// Retrieve the length semantics for the column
 	if err := self.stmt.conn.cerr(oci_OCIAttrGet.Call(self.ptr, OCI_DTYPE_PARAM, int_ref(&sem), 0, OCI_ATTR_CHAR_USED, self.stmt.conn.err.ptr)); err != nil {
@@ -71,8 +54,13 @@ func (self *t_descriptor) len() int {
 			panic(err)
 		}
 	}
-	self._len = w
 	return w
+}
+
+func (self *t_descriptor) define(pos int, addr interface{}, size int, typ int) error {
+	self.val_ptr = addr
+	ptr := reflect.ValueOf(self.val_ptr).Pointer()
+	return self.stmt.conn.cerr(oci_OCIDefineByPos.Call(self.stmt.ptr, ref(&self.ptr), self.stmt.conn.err.ptr, uintptr(pos), ptr, uintptr(size), uintptr(typ), int_ref(&self.ind), 0, 0, 0))
 }
 
 /*

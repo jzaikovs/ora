@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/jzaikovs/clitable"
 	"testing"
+	"time"
 )
 
 var (
@@ -28,21 +29,21 @@ func TestExec(t *testing.T) {
 	}
 	defer db.Close()
 
-	if _, err = db.Exec("create table go_test(id number, name varchar2(32))"); err != nil {
+	if _, err = db.Exec("create table go_test(id number, name varchar2(32), date_bind date)"); err != nil {
 		t.Error(err)
 		//return
 	}
 
-	if _, err = db.Exec("insert into go_test values(:1, :2)", 1337, "leet"); err != nil {
+	if _, err = db.Exec("insert into go_test values(:1, :2, :3)", 1337, "leet", time.Now()); err != nil {
 		t.Error(err)
 	}
 
-	stmt, err := db.Prepare("insert into go_test values(:1, :2)")
+	stmt, err := db.Prepare("insert into go_test values(:1, :2, :3)")
 	if err != nil {
 		t.Error(err)
 	} else {
 		for i := 0; i < 5; i++ {
-			if _, err = stmt.Exec(i, "#"+fmt.Sprint(i)); err != nil {
+			if _, err = stmt.Exec(i, "#"+fmt.Sprint(i), time.Now()); err != nil {
 				t.Error(err)
 				break
 			}
@@ -79,25 +80,36 @@ func TestExec(t *testing.T) {
 		}
 	}
 
-	/*
-		db2, err := sql.Open("ora", DB_ACCESS)
-		if err != nil {
-			t.Error(err)
-		}
+	stmt, err = db.Prepare("insert into go_test values(:1, :2, :3)")
+	if err != nil {
+		t.Error(err)
+	} else {
+		now := time.Now()
+		for i := 0; i < 10; i++ {
+			// executing insert
 
-		r, err = db.Query("select * from v$session where username = user")
-		if err != nil {
-			t.Error(err)
-		} else {
-			if err = clitable.Print(r); err != nil {
+			if _, err = stmt.Exec(100000+i, "#"+fmt.Sprint(i), time.Now()); err != nil {
 				t.Error(err)
+				break
 			}
 		}
+		t.Log(time.Since(now).Seconds())
 
-		if err = db2.Close(); err != nil {
+		if err = stmt.Close(); err != nil {
 			t.Error(err)
 		}
-	*/
+	}
+
+	tx, _ := db.Begin()
+	db.Exec("TRUNCATE TABLE go_test")
+	db.Exec("INSERT INTO go_test (id) VALUES(:1)", 123)
+	tx.Rollback()
+	row := tx.QueryRow("SELECT count(1) FROM go_test")
+	var cnt int64
+	row.Scan(&cnt)
+	if cnt != 0 {
+		t.Error("transaction rollback not working!")
+	}
 
 	if _, err = db.Exec("drop table go_test"); err != nil {
 		t.Error(err)
@@ -152,22 +164,53 @@ func BenchmarkQuery(b *testing.B) {
 		return
 	}
 	defer db.Close()
-	rows, err := db.Query("select dummy from dual connect by level < :1", b.N)
+
+	for i := 0; i < b.N; i++ {
+
+		b.StartTimer()
+		rows, err := db.Query("select dummy from dual connect by level <= :1", 0)
+		if err != nil {
+			b.Error(err)
+			return
+		}
+		b.StopTimer()
+
+		rows.Close()
+	}
+	//b.Log(count)
+}
+
+func BenchmarkFetch(b *testing.B) {
+	b.StopTimer()
+	db, err := sql.Open("ora", DB_ACCESS)
 	if err != nil {
 		b.Error(err)
 		return
 	}
-	defer rows.Close()
-	b.StartTimer()
+	defer db.Close()
 
-	count := 0
-	var val string
-	for rows.Next() {
-		if err := rows.Scan(&val); err != nil {
+	for i := 0; i < b.N; i++ {
+		rows, err := db.Query("select dummy from dual connect by level <= :1", 0)
+		if err != nil {
 			b.Error(err)
+			return
 		}
-		count++
-	}
 
-	b.Log(count)
+		b.StartTimer()
+
+		count := 0
+		var val string
+		for rows.Next() {
+			if err := rows.Scan(&val); err != nil {
+				b.Error(err)
+				rows.Close()
+				return
+			}
+			count++
+		}
+
+		b.StopTimer()
+		rows.Close()
+	}
+	//b.Log(count)
 }

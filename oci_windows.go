@@ -9,7 +9,7 @@ var (
 	oci                    = syscall.NewLazyDLL("oci.dll")
 	oci_OCIAttrGet         = oci.NewProc("OCIAttrGet")
 	oci_OCIAttrSet         = oci.NewProc("OCIAttrSet")
-	oci_OCIBindByName      = oci.NewProc("OCIBindByName")
+	oci_OCIBindByPos       = oci.NewProc("OCIBindByPos")
 	oci_OCIDefineByPos     = oci.NewProc("OCIDefineByPos")
 	oci_OCIDescriptorAlloc = oci.NewProc("OCIDescriptorAlloc")
 	oci_OCIDescriptorFree  = oci.NewProc("OCIDescriptorFree")
@@ -26,6 +26,8 @@ var (
 	oci_OCIStmtFetch2      = oci.NewProc("OCIStmtFetch2")
 	oci_OCIStmtPrepare2    = oci.NewProc("OCIStmtPrepare2") // this allows statement caching
 	oci_OCIStmtRelease     = oci.NewProc("OCIStmtRelease")
+	oci_OCITransCommit     = oci.NewProc("OCITransCommit")
+	oci_OCITransRollback   = oci.NewProc("OCITransRollback")
 
 	//oci_OCIStmtFetch      = oci.NewProc("OCIStmtFetch") // old
 	//oci_OCIStmtPrepare     = oci.NewProc("OCIStmtPrepare") // old
