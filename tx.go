@@ -1,18 +1,16 @@
 package ora
 
-import (
-//"database/sql/driver"
-)
-
-// transaction handler
-type t_tx struct {
-	conn *t_conn
+// Transaction handler
+type Transaction struct {
+	conn *connStruct
 }
 
-func (self *t_tx) Commit() error {
-	return self.conn.cerr(oci_OCITransCommit.Call(self.conn.serv.ptr, self.conn.err.ptr, OCI_DEFAULT))
+// Commit implements transaction commit
+func (tx *Transaction) Commit() error {
+	return tx.conn.cerr(oci_OCITransCommit.Call(tx.conn.serv.ptr, tx.conn.err.ptr, OCI_DEFAULT))
 }
 
-func (self *t_tx) Rollback() error {
-	return self.conn.cerr(oci_OCITransRollback.Call(self.conn.serv.ptr, self.conn.err.ptr, OCI_DEFAULT))
+// Rollback implements transaction rollback
+func (tx *Transaction) Rollback() error {
+	return tx.conn.cerr(oci_OCITransRollback.Call(tx.conn.serv.ptr, tx.conn.err.ptr, OCI_DEFAULT))
 }

@@ -3,13 +3,14 @@ package ora
 import (
 	"database/sql"
 	"fmt"
-	"github.com/jzaikovs/clitable"
 	"testing"
 	"time"
+
+	"github.com/jzaikovs/clitable"
 )
 
 var (
-	DB_ACCESS = "ora_go_test/ora_go_test_password@//oracle:1521/XE"
+	testDBConnectString = "ora_go_test/ora_go_test_password@//oracle:1521/XE"
 )
 
 /*
@@ -22,7 +23,7 @@ grant connect, resource to ora_go_test;
 */
 
 func TestExec(t *testing.T) {
-	db, err := sql.Open("ora", DB_ACCESS)
+	db, err := sql.Open("ora", testDBConnectString)
 	if err != nil {
 		t.Error(err)
 		return
@@ -118,7 +119,7 @@ func TestExec(t *testing.T) {
 }
 
 func TestDatabase(t *testing.T) {
-	db, err := sql.Open("ora", DB_ACCESS)
+	db, err := sql.Open("ora", testDBConnectString)
 	if err != nil {
 		t.Error(err)
 		return
@@ -142,7 +143,7 @@ func TestDatabase(t *testing.T) {
 }
 
 func TestErrors(t *testing.T) {
-	db, err := sql.Open("ora", DB_ACCESS)
+	db, err := sql.Open("ora", testDBConnectString)
 	if err != nil {
 		t.Error(err)
 		return
@@ -158,7 +159,7 @@ func TestErrors(t *testing.T) {
 
 func BenchmarkQuery(b *testing.B) {
 	b.StopTimer()
-	db, err := sql.Open("ora", DB_ACCESS)
+	db, err := sql.Open("ora", testDBConnectString)
 	if err != nil {
 		b.Error(err)
 		return
@@ -182,7 +183,7 @@ func BenchmarkQuery(b *testing.B) {
 
 func BenchmarkFetch(b *testing.B) {
 	b.StopTimer()
-	db, err := sql.Open("ora", DB_ACCESS)
+	db, err := sql.Open("ora", testDBConnectString)
 	if err != nil {
 		b.Error(err)
 		return

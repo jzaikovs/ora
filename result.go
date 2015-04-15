@@ -4,14 +4,19 @@ import (
 	"database/sql/driver"
 )
 
-type t_result struct {
-	affted_rows int64
+// Result implements driver.Result interface
+type Result struct {
+	affectedRows int64
 }
 
-func (self t_result) LastInsertId() (int64, error) {
+// LastInsertId returns last inserted id
+// TODO: this is not implemented
+func (result Result) LastInsertId() (int64, error) {
 	return 0, driver.ErrSkip
 }
 
-func (self t_result) RowsAffected() (int64, error) {
+// RowsAffected returns affected row count
+// TODO: this is not implemented
+func (result Result) RowsAffected() (int64, error) {
 	return 0, driver.ErrSkip
 }

@@ -1,14 +1,14 @@
 package ora
 
-type oci_handle struct {
+type ociHandle struct {
 	ptr uintptr
 	typ int
 }
 
-func (self oci_handle) free() {
-	oci_OCIHandleFree.Call(self.ptr, uintptr(self.typ))
+func (handle ociHandle) free() {
+	oci_OCIHandleFree.Call(handle.ptr, uintptr(handle.typ))
 }
 
-func (self *oci_handle) ref() uintptr {
-	return ref(&self.ptr)
+func (handle *ociHandle) ref() uintptr {
+	return ref(&handle.ptr)
 }

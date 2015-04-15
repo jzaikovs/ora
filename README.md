@@ -6,7 +6,7 @@ For now it's only implements basic `database/sql/driver` interface.
 
 For 64bit go you will need 64bit oracle instant client.
 
-# windows 
+# windows
 
 * you will only need instant client installed
 * path to instant client should be in PATH system variables
@@ -49,4 +49,3 @@ func main() {
 	}
 }
 ```
-

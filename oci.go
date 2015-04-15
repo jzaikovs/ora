@@ -90,3 +90,27 @@ const (
 	OCI_CONTINUE          = -24200
 	OCI_ROWCBK_DONE       = -24201
 )
+
+var (
+	oci_OCIAttrGet         = ociLibrary.NewProc("OCIAttrGet")
+	oci_OCIAttrSet         = ociLibrary.NewProc("OCIAttrSet")
+	oci_OCIBindByPos       = ociLibrary.NewProc("OCIBindByPos")
+	oci_OCIDefineByPos     = ociLibrary.NewProc("OCIDefineByPos")
+	oci_OCIDescriptorAlloc = ociLibrary.NewProc("OCIDescriptorAlloc")
+	oci_OCIDescriptorFree  = ociLibrary.NewProc("OCIDescriptorFree")
+	oci_OCIEnvCreate       = ociLibrary.NewProc("OCIEnvCreate")
+	oci_OCIErrorGet        = ociLibrary.NewProc("OCIErrorGet")
+	oci_OCIHandleAlloc     = ociLibrary.NewProc("OCIHandleAlloc")
+	oci_OCIHandleFree      = ociLibrary.NewProc("OCIHandleFree")
+	oci_OCIInitialize      = ociLibrary.NewProc("OCIInitialize")
+	oci_OCILogoff          = ociLibrary.NewProc("OCILogoff")
+	oci_OCILogon           = ociLibrary.NewProc("OCILogon")
+	oci_OCIParamGet        = ociLibrary.NewProc("OCIParamGet")
+	oci_OCIRowidToChar     = ociLibrary.NewProc("OCIRowidToChar")
+	oci_OCIStmtExecute     = ociLibrary.NewProc("OCIStmtExecute")
+	oci_OCIStmtFetch2      = ociLibrary.NewProc("OCIStmtFetch2")
+	oci_OCIStmtPrepare2    = ociLibrary.NewProc("OCIStmtPrepare2") // this allows statement caching
+	oci_OCIStmtRelease     = ociLibrary.NewProc("OCIStmtRelease")
+	oci_OCITransCommit     = ociLibrary.NewProc("OCITransCommit")
+	oci_OCITransRollback   = ociLibrary.NewProc("OCITransRollback")
+)

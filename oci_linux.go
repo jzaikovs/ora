@@ -4,12 +4,18 @@ import (
 	"gopkgs.com/dl.v1"
 )
 
-type t_dll struct {
+var (
+	ociLibrary = NewLazyDLL("libclntsh.so")
+)
+
+// Library handler
+type Library struct {
 	dll *dl.DL
 }
 
-func NewLazyDLL(name string) (dll *t_dll) {
-	dll = new(t_dll)
+// NewLazyDLL loads static library
+func NewLazyDLL(name string) (dll *Library) {
+	dll = new(Library)
 	var err error
 	if dll.dll, err = dl.Open(name, dl.RTLD_LAZY); err != nil {
 		panic(err)
@@ -17,44 +23,22 @@ func NewLazyDLL(name string) (dll *t_dll) {
 	return
 }
 
-func (self *t_dll) NewProc(name string) *t_callee {
-	callee := new(t_callee)
-	callee.err = self.dll.Sym(name, &callee.fn)
+// NewProc creates system call proc to passed functio from Library
+func (lib *Library) NewProc(name string) *LibraryProc {
+	callee := new(LibraryProc)
+	callee.err = lib.dll.Sym(name, &callee.fn)
 	return callee
 }
 
-type t_callee struct {
+// LibraryProc handler for single procedure from library
+type LibraryProc struct {
 	err error
 	fn  func(...uintptr) uintptr
 }
 
-func (self t_callee) Call(args ...uintptr) (r1 uintptr, r2 uintptr, err error) {
-	err = self.err
-	r1 = self.fn(args...)
+// Call calls function from library
+func (lib LibraryProc) Call(args ...uintptr) (r1 uintptr, r2 uintptr, err error) {
+	err = lib.err
+	r1 = lib.fn(args...)
 	return
 }
-
-var (
-	oci                    = NewLazyDLL("libclntsh.so")
-	oci_OCIAttrGet         = oci.NewProc("OCIAttrGet")
-	oci_OCIAttrSet         = oci.NewProc("OCIAttrSet")
-	oci_OCIBindByPos       = oci.NewProc("OCIBindByPos")
-	oci_OCIDefineByPos     = oci.NewProc("OCIDefineByPos")
-	oci_OCIDescriptorAlloc = oci.NewProc("OCIDescriptorAlloc")
-	oci_OCIDescriptorFree  = oci.NewProc("OCIDescriptorFree")
-	oci_OCIEnvCreate       = oci.NewProc("OCIEnvCreate")
-	oci_OCIErrorGet        = oci.NewProc("OCIErrorGet")
-	oci_OCIHandleAlloc     = oci.NewProc("OCIHandleAlloc")
-	oci_OCIHandleFree      = oci.NewProc("OCIHandleFree")
-	oci_OCIInitialize      = oci.NewProc("OCIInitialize")
-	oci_OCILogoff          = oci.NewProc("OCILogoff")
-	oci_OCILogon           = oci.NewProc("OCILogon")
-	oci_OCIParamGet        = oci.NewProc("OCIParamGet")
-	oci_OCIRowidToChar     = oci.NewProc("OCIRowidToChar")
-	oci_OCIStmtExecute     = oci.NewProc("OCIStmtExecute")
-	oci_OCIStmtFetch2      = oci.NewProc("OCIStmtFetch2")
-	oci_OCIStmtPrepare2    = oci.NewProc("OCIStmtPrepare2") // this allows statement caching
-	oci_OCIStmtRelease     = oci.NewProc("OCIStmtRelease")
-	oci_OCITransCommit     = oci.NewProc("OCITransCommit")
-	oci_OCITransRollback   = oci.NewProc("OCITransRollback")
-)
