@@ -5,9 +5,10 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"log"
 )
 
-type connStruct struct {
+type Conn struct {
 	env    *ociHandle
 	serv   *ociHandle
 	err    *ociHandle
@@ -16,8 +17,8 @@ type connStruct struct {
 }
 
 // http://docs.oracle.com/cd/B28359_01/appdev.111/b28395/oci16rel001.htm#LNOCI7016
-func newConnection() (*connStruct, error) {
-	conn := new(connStruct)
+func newConnection() (*Conn, error) {
+	conn := new(Conn)
 	conn.env = &ociHandle{typ: OCI_HTYPE_ENV}
 
 	// TODO: OCI_THREADED
@@ -37,12 +38,13 @@ func newConnection() (*connStruct, error) {
 	return conn, nil
 }
 
-func (conn *connStruct) Begin() (driver.Tx, error) {
+func (conn *Conn) Begin() (driver.Tx, error) {
 	conn.tx = &Transaction{conn}
 	return conn.tx, nil
 }
 
-func (conn *connStruct) Prepare(query string) (driver.Stmt, error) {
+// Prepare creates statement for query
+func (conn *Conn) Prepare(query string) (driver.Stmt, error) {
 	stmt, err := conn.newStatement()
 	if err != nil {
 		return nil, err
@@ -54,7 +56,7 @@ func (conn *connStruct) Prepare(query string) (driver.Stmt, error) {
 }
 
 // TODO: test that connection is actually closed!
-func (conn *connStruct) Close() error {
+func (conn *Conn) Close() error {
 	if conn.opened {
 		oci_OCILogoff.Call(conn.serv.ptr, conn.err.ptr)
 		conn.opened = false
@@ -65,13 +67,13 @@ func (conn *connStruct) Close() error {
 }
 
 // function for creating statement
-func (conn *connStruct) newStatement() (stmt *Statement, err error) {
+func (conn *Conn) newStatement() (stmt *Statement, err error) {
 	stmt = &Statement{conn: conn, tx: conn.tx}
 	stmt.ociHandle, err = conn.alloc(OCI_HTYPE_STMT) // allocate prepare statement, later we will need to free it
 	return
 }
 
-func (conn *connStruct) logon(user, pass, host []byte) (err error) {
+func (conn *Conn) logon(user, pass, host []byte) (err error) {
 	userLen := uintptr(len(user))
 	passLen := uintptr(len(pass))
 	hostLen := uintptr(len(host))
@@ -84,7 +86,7 @@ func (conn *connStruct) logon(user, pass, host []byte) (err error) {
 	return
 }
 
-func (conn *connStruct) alloc(typ int) (*ociHandle, error) {
+func (conn *Conn) alloc(typ int) (*ociHandle, error) {
 	h := &ociHandle{typ: typ}
 	if err := conn.envErr(oci_OCIHandleAlloc.Call(conn.env.ptr, h.ref(), uintptr(typ), 0, 0)); err != nil {
 		return nil, err
@@ -104,17 +106,17 @@ func (conn *connStruct) alloc_descr() *ociHandle {
 */
 
 // function for handling errors from OCI calls
-func (conn *connStruct) cerr(r uintptr, r2 uintptr, err error) error {
+func (conn *Conn) cerr(r uintptr, r2 uintptr, err error) error {
 	return conn.onOCIReturn(int16(r), OCI_HTYPE_ERROR)
 }
 
 // function for handling errors on env create and alloc
-func (conn *connStruct) envErr(r uintptr, r2 uintptr, err error) error {
+func (conn *Conn) envErr(r uintptr, r2 uintptr, err error) error {
 	return conn.onOCIReturn(int16(r), OCI_HTYPE_ENV)
 }
 
 // http://docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci17msc007.htm#LNOCI17287
-func (conn *connStruct) onOCIReturn(code int16, htyp int) error {
+func (conn *Conn) onOCIReturn(code int16, htyp int) error {
 	switch code {
 	case OCI_SUCCESS:
 		return nil
@@ -128,7 +130,7 @@ func (conn *connStruct) onOCIReturn(code int16, htyp int) error {
 }
 
 // https://docs.oracle.com/database/121/LNOCI/oci17msc007.htm#LNOCI17287
-func (conn *connStruct) getErr(htyp int) error {
+func (conn *Conn) getErr(htyp int) error {
 	buf := make([]byte, 3072) // OCI_ERROR_MAXMSG_SIZE2 3072
 	errcode := 0
 	if htyp == OCI_HTYPE_ERROR {
@@ -142,4 +144,30 @@ func (conn *connStruct) getErr(htyp int) error {
 	}
 
 	return errors.New(string(buf[:bytes.IndexByte(buf, 0)]))
+}
+
+// Query executes query statement using specified connenction
+func (conn *Conn) Query(stmt string, binds ...interface{}) (qr *QueryResult, err error) {
+	prep, err := conn.Prepare(stmt)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	//defer prep.Close()
+
+	x := make([]driver.Value, len(binds))
+	for i, b := range binds {
+		x[i] = b
+	}
+
+	result, err := prep.Query(x)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+
+	qr = newQueryResult(result.(*Rows), prep)
+
+	return
 }

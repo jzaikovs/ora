@@ -11,7 +11,7 @@ import (
 type Rows struct {
 	stmt    *Statement
 	columns []string
-	descr   []*descriptor
+	descr   []*Descriptor
 }
 
 // Next fetches rows from database and stores in destionation slice

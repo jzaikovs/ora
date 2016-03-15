@@ -20,6 +20,11 @@ type driverStruct struct {
 
 // Function implements driver.Open interface
 func (driverStruct) Open(connectionString string) (driver.Conn, error) {
+	return Open(connectionString)
+}
+
+// Open creates new connection
+func Open(connectionString string) (*Conn, error) {
 	if len(connectionString) == 0 {
 		return nil, errors.New("empty connect string")
 	}

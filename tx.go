@@ -2,7 +2,7 @@ package ora
 
 // Transaction handler
 type Transaction struct {
-	conn *connStruct
+	conn *Conn
 }
 
 // Commit implements transaction commit

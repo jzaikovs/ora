@@ -13,6 +13,33 @@ var (
 	testDBConnectString = "ora_go_test/ora_go_test_password@//oracle:1521/XE"
 )
 
+func TestQuery(t *testing.T) {
+	conn, err := Open(testDBConnectString)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	r, err := conn.Query("select * from dual")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	defer r.Close()
+
+	count := 0
+
+	for r.Next() == nil {
+		fmt.Println(r.Values())
+		count++
+	}
+
+	if count == 0 {
+		t.Error("Conn.Query() return no rows on dual query")
+	}
+}
+
 /*
 Setup for testing:
 ```

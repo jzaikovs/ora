@@ -2,13 +2,14 @@ package ora
 
 import (
 	"database/sql/driver"
+	"log"
 	"time"
 )
 
 // Statement handles single SQL statement
 type Statement struct {
 	*ociHandle
-	conn   *connStruct
+	conn   *Conn
 	tx     *Transaction
 	binds  []interface{} // will hold pointers to every bind variable
 	closed bool
@@ -105,16 +106,18 @@ func (stmt *Statement) exec(n int) (err error) {
 // Query executes query statement
 func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
 	if err := stmt.bind(args); err != nil {
+		log.Println(err)
 		return nil, err
 	}
 
 	if err := stmt.exec(0); err != nil {
+		log.Println(err)
 		return nil, err
 	}
 
 	var (
 		columns []string      // collect all columns names we will need them for database/sql
-		descrs  []*descriptor // collect all description handles we will need them to fetch row
+		descrs  []*Descriptor // collect all description handles we will need them to fetch row
 	)
 
 	// http://web.stanford.edu/dept/itss/docs/oracle/10gR2/appdev.102/b14250/oci04sql.htm#sthref629
@@ -140,7 +143,7 @@ func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
 		}
 
 		if err != nil {
-			logLine("define result failed with err:", err)
+			logLine("Define result failed with err:", err)
 			return nil, err
 		}
 
@@ -151,8 +154,8 @@ func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
 	return &Rows{stmt: stmt, columns: columns, descr: descrs}, nil
 }
 
-func (stmt *Statement) newDescriptor(pos int) (d *descriptor, err error) {
-	d = &descriptor{stmt: stmt}
+func (stmt *Statement) newDescriptor(pos int) (d *Descriptor, err error) {
+	d = &Descriptor{stmt: stmt}
 	if err = stmt.conn.cerr(oci_OCIParamGet.Call(stmt.ptr, OCI_HTYPE_STMT, stmt.conn.err.ptr, ref(&d.ptr), uintptr(pos))); err != nil {
 		return
 	}

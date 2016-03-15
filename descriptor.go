@@ -6,7 +6,7 @@ import (
 
 // http://web.stanford.edu/dept/itss/docs/oracle/10gR2/appdev.102/b14250/oci04sql.htm#sthref629
 
-type descriptor struct {
+type Descriptor struct {
 	stmt   *Statement // statement, TODO: do we need this?
 	ptr    uintptr    // pointer to descriptor allocation
 	typ    int
@@ -16,7 +16,16 @@ type descriptor struct {
 	valPtr interface{}
 }
 
-func (descr *descriptor) getTyp() (t int) {
+func (descr *Descriptor) Type() int {
+	return descr.typ
+
+}
+
+func (descr *Descriptor) Name() string {
+	return descr.name
+}
+
+func (descr *Descriptor) getTyp() (t int) {
 	err := descr.stmt.conn.cerr(oci_OCIAttrGet.Call(descr.ptr, OCI_DTYPE_PARAM, intRef(&t), 0, OCI_ATTR_DATA_TYPE, descr.stmt.conn.err.ptr))
 	if err != nil {
 		panic(err)
@@ -24,7 +33,7 @@ func (descr *descriptor) getTyp() (t int) {
 	return
 }
 
-func (descr *descriptor) getName() string {
+func (descr *Descriptor) getName() string {
 	name := make([]byte, 32)
 	nameLen := 0
 
@@ -35,7 +44,7 @@ func (descr *descriptor) getName() string {
 	return string(name[:nameLen])
 }
 
-func (descr *descriptor) getLen() int {
+func (descr *Descriptor) getLen() int {
 	sem := 0
 	// Retrieve the length semantics for the column
 	if err := descr.stmt.conn.cerr(oci_OCIAttrGet.Call(descr.ptr, OCI_DTYPE_PARAM, intRef(&sem), 0, OCI_ATTR_CHAR_USED, descr.stmt.conn.err.ptr)); err != nil {
@@ -57,7 +66,7 @@ func (descr *descriptor) getLen() int {
 	return w
 }
 
-func (descr *descriptor) define(pos int, addr interface{}, size int, typ int) error {
+func (descr *Descriptor) define(pos int, addr interface{}, size int, typ int) error {
 	descr.valPtr = addr
 	ptr := reflect.ValueOf(descr.valPtr).Pointer()
 	return descr.stmt.conn.cerr(oci_OCIDefineByPos.Call(descr.stmt.ptr, ref(&descr.ptr), descr.stmt.conn.err.ptr, uintptr(pos), ptr, uintptr(size), uintptr(typ), intRef(&descr.ind), 0, 0, 0))
