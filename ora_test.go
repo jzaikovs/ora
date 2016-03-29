@@ -3,15 +3,58 @@ package ora
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/jzaikovs/clitable"
 )
 
+/*
+Setup for testing:
+```
+create user ora_go_test identified by ora_go_test_password;
+grant connect, resource to ora_go_test;
+```
+*/
+
 var (
 	testDBConnectString = "ora_go_test/ora_go_test_password@//oracle:1521/XE"
+	db                  *sql.DB
 )
+
+func setup() (err error) {
+	fmt.Println("setup...")
+	_, err = db.Exec("create table go_test(id number, name varchar2(32), date_bind date, lobcol clob)")
+	return
+}
+
+func cleanup() (err error) {
+	fmt.Println("cleanup...")
+	_, err = db.Exec("drop table go_test")
+	db.Close()
+	return
+
+}
+
+func TestMain(m *testing.M) {
+	// your func
+	var err error
+	db, err = sql.Open("ora", testDBConnectString)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	setup()
+
+	retCode := m.Run()
+
+	cleanup()
+
+	// call with result of m.Run()
+	os.Exit(retCode)
+}
 
 func TestQuery(t *testing.T) {
 	conn, err := Open(testDBConnectString)
@@ -31,7 +74,14 @@ func TestQuery(t *testing.T) {
 	count := 0
 
 	for r.Next() == nil {
-		fmt.Println(r.Values())
+		v, err := r.Values()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if fmt.Sprint(v[0]) != "X" {
+			t.Error("dual not returning X")
+		}
 		count++
 	}
 
@@ -40,46 +90,103 @@ func TestQuery(t *testing.T) {
 	}
 }
 
-/*
-Setup for testing:
-```
-create user ora_go_test identified by ora_go_test_password;
-grant connect, resource to ora_go_test;
-```
+func TestLob(t *testing.T) {
+	if _, err := db.Exec("delete go_test"); err != nil {
+		t.Error(err)
+		return
+	}
 
-*/
+	if _, err := db.Exec("insert into go_test (lobcol) values('test')"); err != nil {
+		t.Error(err)
+		return
+	}
 
-func TestExec(t *testing.T) {
-	db, err := sql.Open("ora", testDBConnectString)
+	row, err := db.Query("select lobcol from go_test")
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	defer db.Close()
 
-	if _, err = db.Exec("create table go_test(id number, name varchar2(32), date_bind date)"); err != nil {
+	row.Next()
+
+	var s sql.NullString
+
+	if err = row.Scan(&s); err != nil {
 		t.Error(err)
-		//return
+		return
 	}
 
-	if _, err = db.Exec("insert into go_test values(:1, :2, :3)", 1337, "leet", time.Now()); err != nil {
+	if s.String != "test" {
+		t.Error("clob fetch not working")
+	}
+}
+
+func TestExecInsert(t *testing.T) {
+	var err error
+
+	if _, err = db.Exec("insert into go_test (id, name, date_bind) values(:1, :2, :3)", 1337, "leet", time.Now()); err != nil {
 		t.Error(err)
 	}
+}
 
-	stmt, err := db.Prepare("insert into go_test values(:1, :2, :3)")
+func TestPrepareInsert(t *testing.T) {
+	db.Exec("truncate table go_test")
+
+	stmt, err := db.Prepare("insert into go_test (id, name, date_bind) values(:1, :2, :3)")
 	if err != nil {
 		t.Error(err)
-	} else {
-		for i := 0; i < 5; i++ {
-			if _, err = stmt.Exec(i, "#"+fmt.Sprint(i), time.Now()); err != nil {
-				t.Error(err)
-				break
-			}
-		}
+		return
+	}
 
-		if err = stmt.Close(); err != nil {
+	n := 5
+
+	for i := 0; i < n; i++ {
+		if _, err = stmt.Exec(i, "#"+fmt.Sprint(i), time.Now()); err != nil {
 			t.Error(err)
+			break
 		}
+	}
+
+	if err = stmt.Close(); err != nil {
+		t.Error(err)
+	}
+
+	var cnt float64
+	row := db.QueryRow("select count(1) from go_test")
+	row.Scan(&cnt)
+
+	if int(cnt) != n {
+		t.Log(cnt)
+		t.Error("After insert count not what expected")
+	}
+}
+
+func TestPrepareInsert2(t *testing.T) {
+	stmt, err := db.Prepare("insert into go_test (id, name, date_bind) values(:1, :2, :3)")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	now := time.Now()
+	for i := 0; i < 10; i++ { // executing insert
+		if _, err = stmt.Exec(100000+i, "#"+fmt.Sprint(i), time.Now()); err != nil {
+			t.Error(err)
+			break
+		}
+	}
+	t.Log(time.Since(now).Seconds())
+
+	if err = stmt.Close(); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestDelete(t *testing.T) {
+	var err error
+
+	if _, err = db.Exec("insert into go_test (id, name, date_bind) values(:1, :2, :3)", 1337, "leet", time.Now()); err != nil {
+		t.Error(err)
 	}
 
 	if _, err = db.Exec("delete go_test where id = :1", 2); err != nil {
@@ -89,59 +196,49 @@ func TestExec(t *testing.T) {
 	if _, err = db.Exec("delete go_test where name = :1", "leet"); err != nil {
 		t.Error(err)
 	}
+}
 
-	r, err := db.Query("select t.rowid, t.* from go_test t")
+func TestQuery2(t *testing.T) {
+	TestPrepareInsert(t)
+
+	r, err := db.Query("select t.rowid, t.id, name, date_bind from go_test t")
 	if err != nil {
 		t.Error(err)
-	} else {
-		if err = clitable.Print(r); err != nil {
-			t.Error(err)
-		}
+		return
 	}
 
-	r, err = db.Query("SELECT column_name as name, nullable, concat(concat(concat(data_type,'('),data_length),')') as type FROM user_tab_columns WHERE table_name= upper(:1)", "go_test")
+	if err = clitable.Print(r); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestQuery3(t *testing.T) {
+	r, err := db.Query("SELECT column_name as name, nullable, concat(concat(concat(data_type,'('),data_length),')') as type FROM user_tab_columns WHERE table_name= upper(:1)", "go_test")
 	if err != nil {
 		t.Error(err)
-	} else {
-		if err = clitable.Print(r); err != nil {
-			t.Error(err)
-		}
+		return
 	}
 
-	stmt, err = db.Prepare("insert into go_test values(:1, :2, :3)")
+	if err = clitable.Print(r); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestTransactions(t *testing.T) {
+	tx, err := db.Begin()
 	if err != nil {
 		t.Error(err)
-	} else {
-		now := time.Now()
-		for i := 0; i < 10; i++ {
-			// executing insert
-
-			if _, err = stmt.Exec(100000+i, "#"+fmt.Sprint(i), time.Now()); err != nil {
-				t.Error(err)
-				break
-			}
-		}
-		t.Log(time.Since(now).Seconds())
-
-		if err = stmt.Close(); err != nil {
-			t.Error(err)
-		}
+		return
 	}
-
-	tx, _ := db.Begin()
 	db.Exec("TRUNCATE TABLE go_test")
 	db.Exec("INSERT INTO go_test (id) VALUES(:1)", 123)
 	tx.Rollback()
+
 	row := tx.QueryRow("SELECT count(1) FROM go_test")
 	var cnt int64
 	row.Scan(&cnt)
 	if cnt != 0 {
 		t.Error("transaction rollback not working!")
-	}
-
-	if _, err = db.Exec("drop table go_test"); err != nil {
-		t.Error(err)
-		return
 	}
 }
 

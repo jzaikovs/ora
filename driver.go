@@ -4,10 +4,13 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"log"
+	"os"
 	"regexp"
 )
 
 var (
+	trace            = log.New(os.Stdout, "TRACE:", log.Lshortfile)
 	patternEzconnect = regexp.MustCompile(`^((.*?)/(.*?))?(@|//)(.*/.*)$`)
 )
 
@@ -38,8 +41,6 @@ func Open(connectionString string) (*Conn, error) {
 	username := matches[2]
 	password := matches[3]
 	database := matches[5]
-
-	//logLine("db=", string(database), " user=", string(username), " pass=", string(password))
 
 	// create connection and logon
 	conn, err := newConnection()

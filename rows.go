@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"database/sql/driver"
+	"io/ioutil"
 	"time"
 )
 
@@ -37,19 +38,46 @@ func (rows *Rows) Next(dest []driver.Value) (err error) {
 			dest[i] = string(d.valPtr.([]byte))
 		case OCI_TYP_VARCHAR, OCI_TYP_CHAR:
 			if d.ind != 0 {
-				dest[i] = sql.NullString{}
+				dest[i] = sql.NullString{} // in oracle null is same as empty string
 				break
 			}
 			buf := d.valPtr.([]byte)
 			n := bytes.IndexByte(buf, 0) // find null byte
 			dest[i] = string(buf[:n])
+		case OCI_TYP_LONG:
+			if d.ind != 0 {
+				dest[i] = sql.NullString{} // in oracle null is same as empty string
+				break
+			}
+			buf := d.valPtr.([]byte)
+			dest[i] = string(buf[:d.rlen])
+		case OCI_TYP_CLOB:
+			lob := d.valPtr.(*Lob)
+
+			r, err := lob.OpenReader()
+			if err != nil {
+				return err
+			}
+			defer r.Close()
+
+			buf, err := ioutil.ReadAll(r)
+			if err != nil {
+				return err
+			}
+
+			dest[i] = string(buf)
 		case OCI_TYP_NUMBER:
 			if d.ind != 0 {
 				dest[i] = sql.NullFloat64{}
 				break
 			}
-			x := d.valPtr.(*float64)
-			dest[i] = *x
+			if sizeOfInt == 4 {
+				x := d.valPtr.(*float32)
+				dest[i] = *x
+			} else {
+				x := d.valPtr.(*float64)
+				dest[i] = *x
+			}
 		case OCI_TYP_DATE:
 			if d.ind != 0 {
 				dest[i] = nil

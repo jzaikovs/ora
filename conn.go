@@ -38,6 +38,7 @@ func newConnection() (*Conn, error) {
 	return conn, nil
 }
 
+// Begin begins transaction
 func (conn *Conn) Begin() (driver.Tx, error) {
 	conn.tx = &Transaction{conn}
 	return conn.tx, nil
@@ -55,7 +56,7 @@ func (conn *Conn) Prepare(query string) (driver.Stmt, error) {
 	return stmt, nil
 }
 
-// TODO: test that connection is actually closed!
+// Close closes connection TODO: test that connection is actually closed!
 func (conn *Conn) Close() error {
 	if conn.opened {
 		oci_OCILogoff.Call(conn.serv.ptr, conn.err.ptr)
@@ -79,6 +80,7 @@ func (conn *Conn) logon(user, pass, host []byte) (err error) {
 	hostLen := uintptr(len(host))
 
 	if err = conn.cerr(oci_OCILogon.Call(conn.env.ptr, conn.err.ptr, ref(&conn.serv.ptr), bufAddr(user), userLen, bufAddr(pass), passLen, bufAddr(host), hostLen)); err != nil {
+		err = conn.getErr(OCI_HTYPE_ERROR)
 		conn.Close()
 	} else {
 		conn.opened = true
@@ -93,17 +95,6 @@ func (conn *Conn) alloc(typ int) (*ociHandle, error) {
 	}
 	return h, nil
 }
-
-/* for later use
-func (conn *connStruct) alloc_descr() *ociHandle {
-	h := new(ociHandle)
-	err := conn.envErr(oci_OCIDescriptorAlloc.Call(conn.env.ptr, h.ref(), OCI_DTYPE_ROWID, 0, 0))
-	if err != nil {
-		panic(err)
-	}
-	return h
-}
-*/
 
 // function for handling errors from OCI calls
 func (conn *Conn) cerr(r uintptr, r2 uintptr, err error) error {
@@ -124,6 +115,8 @@ func (conn *Conn) onOCIReturn(code int16, htyp int) error {
 		return conn.getErr(htyp)
 	case OCI_INVALID_HANDLE:
 		return errors.New("OCI call returned OCI_INVALID_HANDLE")
+	default:
+		fmt.Println("onOCIReturn:", conn.getErr(htyp))
 	}
 
 	return fmt.Errorf("OCI call returned - %d", code)

@@ -2,9 +2,11 @@ package ora
 
 import (
 	"database/sql/driver"
-	"log"
 	"time"
 )
+
+// MaxLongSize is size of buffer allocated for long type, (TODO: can this be improved to dynamic allocation?)
+var MaxLongSize = 100000
 
 // Statement handles single SQL statement
 type Statement struct {
@@ -20,6 +22,7 @@ func (stmt *Statement) Close() error {
 	if stmt.closed {
 		return nil
 	}
+
 	stmt.closed = true
 	return stmt.conn.cerr(oci_OCIStmtRelease.Call(stmt.ptr, stmt.conn.err.ptr, 0, 0, OCI_DEFAULT))
 }
@@ -54,9 +57,6 @@ func (stmt *Statement) bind(args []driver.Value) (err error) {
 
 	for i, arg := range args {
 		var bnd uintptr
-		//name := []byte(fmt.Sprintf(":%d", i+1))
-		//n := uintptr(len(name))
-
 		// store pointer to val in binds because garbage collector will discard val
 		// and OCI will pass some random data from memory
 		switch val := arg.(type) { // GC will discard val if not referenced somewhere
@@ -106,12 +106,10 @@ func (stmt *Statement) exec(n int) (err error) {
 // Query executes query statement
 func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
 	if err := stmt.bind(args); err != nil {
-		log.Println(err)
 		return nil, err
 	}
 
 	if err := stmt.exec(0); err != nil {
-		log.Println(err)
 		return nil, err
 	}
 
@@ -134,9 +132,24 @@ func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
 		case OCI_TYP_VARCHAR, OCI_TYP_CHAR:
 			buf := make([]byte, d.length+1) // make buffer where result is stored + 1 null byte
 			err = d.define(pos, buf, len(buf), SQLT_STR)
+		case OCI_TYP_LONG:
+			buf := make([]byte, MaxLongSize)
+			err = d.define(pos, buf, len(buf), SQLT_LNG)
+		case OCI_TYP_CLOB:
+			var lob *Lob
+			if lob, err = stmt.conn.newLob(); err == nil {
+				d.valPtr = lob
+				err = d.define(pos, ref(&lob.ptr), -1, SQLT_CLOB)
+			}
 		case OCI_TYP_NUMBER:
-			tmp := float64(0) // note: oracle numbers can be bigger than float
-			err = d.define(pos, &tmp, sizeOfInt, SQLT_FLT)
+			// TODO: oracle numbers can be bigger than float
+			if sizeOfInt == 4 {
+				tmp := float32(0)
+				err = d.define(pos, &tmp, sizeOfInt, SQLT_FLT)
+			} else {
+				tmp := float64(0)
+				err = d.define(pos, &tmp, sizeOfInt, SQLT_FLT)
+			}
 		case OCI_TYP_DATE:
 			buf := make([]byte, d.length)
 			err = d.define(pos, buf, len(buf), SQLT_DAT)
@@ -155,14 +168,13 @@ func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
 }
 
 func (stmt *Statement) newDescriptor(pos int) (d *Descriptor, err error) {
-	d = &Descriptor{stmt: stmt}
+	d = newDescriptor(stmt)
 	if err = stmt.conn.cerr(oci_OCIParamGet.Call(stmt.ptr, OCI_HTYPE_STMT, stmt.conn.err.ptr, ref(&d.ptr), uintptr(pos))); err != nil {
 		return
 	}
 	d.name = d.getName()
 	d.typ = d.getTyp()
 	d.length = d.getLen()
-
 	return
 }
 
@@ -182,4 +194,22 @@ func (stmt *Statement) prepare(query string) (err error) {
 		//stmt.Close() // free alloc
 	}
 	return
+}
+
+// ColumnConverter converting specific value for sending value to database
+func (stmt *Statement) ColumnConverter(idx int) driver.ValueConverter {
+	return OraValueConverter{idx: idx}
+}
+
+type OraValueConverter struct {
+	// ConvertValue converts a value to a driver Value.
+	stmt *Statement
+	idx  int
+}
+
+// ConvertValue converts type
+func (ovc OraValueConverter) ConvertValue(v interface{}) (driver.Value, error) {
+	//fmt.Printf("convert=%d,t=%T\n", ovc.idx, v)
+
+	return driver.DefaultParameterConverter.ConvertValue(v)
 }
