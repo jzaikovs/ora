@@ -21,6 +21,14 @@ func float64Ref(p *float64) uintptr {
 	return uintptr(unsafe.Pointer(p))
 }
 
+func int32Ref(p *int32) uintptr {
+	return uintptr(unsafe.Pointer(p))
+}
+
+func uint64Ref(p *uint64) uintptr {
+	return uintptr(unsafe.Pointer(p))
+}
+
 func int64Ref(p *int64) uintptr {
 	return uintptr(unsafe.Pointer(p))
 }

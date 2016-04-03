@@ -141,6 +141,7 @@ var (
 	oci_OCIStmtRelease     = ociLibrary.NewProc("OCIStmtRelease")
 	oci_OCITransCommit     = ociLibrary.NewProc("OCITransCommit")
 	oci_OCITransRollback   = ociLibrary.NewProc("OCITransRollback")
+	oci_OCILobRead         = ociLibrary.NewProc("OCILobRead")
 	oci_OCILobRead2        = ociLibrary.NewProc("OCILobRead2")
 	oci_OCILobOpen         = ociLibrary.NewProc("OCILobOpen")
 	oci_OCILobClose        = ociLibrary.NewProc("OCILobClose")

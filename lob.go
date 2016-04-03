@@ -10,13 +10,13 @@ type Lob struct {
 
 func (conn *Conn) newLob() (lob *Lob, err error) {
 	lob = &Lob{conn: conn}
-
 	err = conn.cerr(
 		oci_OCIDescriptorAlloc.Call(
 			conn.env.ptr,
 			ref(&lob.ptr),
 			OCI_DTYPE_LOB,
-			null, null))
+			null, null,
+		))
 	return
 }
 
@@ -27,36 +27,42 @@ func (lob *Lob) OpenReader() (lobr *LobReader, err error) {
 		lob.conn.err.ptr,
 		lob.ptr,
 		OCI_LOB_READONLY))
+
 	return &LobReader{Lob: lob, offset: 1}, err
 }
 
 // LobReader implements reader for oracle lob reading
 type LobReader struct {
 	*Lob
-	offset int
+	offset uint64
 }
 
 // Read reads from lob
 func (lob *LobReader) Read(buf []byte) (n int, err error) {
-	n = len(buf)
-	err = lob.conn.cerr(oci_OCILobRead2.Call(
+	amount := int32(len(buf))
+
+	err = lob.conn.cerr(oci_OCILobRead.Call(
 		lob.conn.serv.ptr, // service
 		lob.conn.err.ptr,  //error
 		lob.ptr,           // ptr
+		int32Ref(&amount),
+		uintptr(int32(lob.offset)), // offset
+		bufAddr(buf),               // buffer
+		uintptr(int32(len(buf))),   // buffer length
 		null,
-		intRef(&n),
-		uintptr(lob.offset), // offset
-		bufAddr(buf),        // buffer
-		uintptr(len(buf)),   // buffer length
-		OCI_ONE_PIECE,
 		null,
-		null, // callback
+		null,
+		null,
+		null,
 		null,
 		SQLCS_IMPLICIT))
-	lob.offset += n
-	if n == 0 || len(buf) != n {
+	n = int(amount)
+	lob.offset += uint64(amount)
+	//trace.Println("FETCHED", n)
+	if n == 0 {
 		err = io.EOF
 	}
+
 	return
 }
 

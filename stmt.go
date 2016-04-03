@@ -156,7 +156,7 @@ func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
 		}
 
 		if err != nil {
-			logLine("Define result failed with err:", err)
+			trace.Printf("Define pos: %d, failed with err: %s", pos, err)
 			return nil, err
 		}
 
@@ -170,6 +170,7 @@ func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
 func (stmt *Statement) newDescriptor(pos int) (d *Descriptor, err error) {
 	d = newDescriptor(stmt)
 	if err = stmt.conn.cerr(oci_OCIParamGet.Call(stmt.ptr, OCI_HTYPE_STMT, stmt.conn.err.ptr, ref(&d.ptr), uintptr(pos))); err != nil {
+		//trace.Printf("OCIParamGet(..., %d) -> %s", pos, err)
 		return
 	}
 	d.name = d.getName()

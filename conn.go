@@ -111,15 +111,27 @@ func (conn *Conn) onOCIReturn(code int16, htyp int) error {
 	switch code {
 	case OCI_SUCCESS:
 		return nil
+	case OCI_SUCCESS_WITH_INFO:
+		//trace.Println("Error: OCI_SUCCESS_WITH_INFO")
+		return nil
+	case OCI_NEED_DATA:
+		//trace.Println("Error: OCI_NEED_DATA")
+		return nil
 	case OCI_ERROR:
 		return conn.getErr(htyp)
 	case OCI_INVALID_HANDLE:
-		return errors.New("OCI call returned OCI_INVALID_HANDLE")
+		return errors.New("Error: OCI call returned OCI_INVALID_HANDLE")
+	case OCI_STILL_EXECUTING:
+		//return fmt.Errorf("Error: OCI_STILL_EXECUTE")
+		return nil
+	case OCI_CONTINUE:
+		//fmt.Errorf("Error: OCI_CONTINUE")
+		return nil
 	default:
-		fmt.Println("onOCIReturn:", conn.getErr(htyp))
+		//fmt.Println("OCI:", conn.getErr(htyp))
 	}
 
-	return fmt.Errorf("OCI call returned - %d", code)
+	return fmt.Errorf("OCI call returned - %d, %v", code, conn.getErr(htyp))
 }
 
 // https://docs.oracle.com/database/121/LNOCI/oci17msc007.htm#LNOCI17287

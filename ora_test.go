@@ -46,7 +46,9 @@ func TestMain(m *testing.M) {
 		return
 	}
 
-	setup()
+	if err = setup(); err != nil {
+		fmt.Println(err)
+	}
 
 	retCode := m.Run()
 
@@ -96,28 +98,38 @@ func TestLob(t *testing.T) {
 		return
 	}
 
-	if _, err := db.Exec("insert into go_test (lobcol) values('test')"); err != nil {
-		t.Error(err)
-		return
+	expected := []string{"helloworld", ""}
+
+	for _, e := range expected {
+		if _, err := db.Exec("insert into go_test (lobcol) values(:1)", e); err != nil {
+			t.Error(err)
+			return
+		}
 	}
 
-	row, err := db.Query("select lobcol from go_test")
+	db.Exec("commit")
+
+	err := query("SELECT id, name, lobcol FROM go_test", func(row *sql.Rows) (err error) {
+		var (
+			id   sql.NullFloat64
+			name sql.NullString
+			lob  sql.NullString
+		)
+
+		if err = row.Scan(&id, &name, &lob); err != nil {
+			t.Error(err)
+			return
+		}
+
+		if lob.String != expected[0] {
+			t.Error("clob fetch not working")
+		}
+		expected = expected[1:]
+		return
+	})
+
 	if err != nil {
 		t.Error(err)
-		return
-	}
-
-	row.Next()
-
-	var s sql.NullString
-
-	if err = row.Scan(&s); err != nil {
-		t.Error(err)
-		return
-	}
-
-	if s.String != "test" {
-		t.Error("clob fetch not working")
 	}
 }
 
@@ -338,4 +350,21 @@ func BenchmarkFetch(b *testing.B) {
 		rows.Close()
 	}
 	//b.Log(count)
+}
+
+func query(sql string, fn func(*sql.Rows) error, binds ...interface{}) (err error) {
+	result, err := db.Query(sql, binds...)
+	if err != nil {
+		return err
+	}
+
+	defer result.Close()
+
+	for result.Next() {
+		if err = fn(result); err != nil {
+			return err
+		}
+	}
+
+	return
 }

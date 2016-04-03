@@ -1,6 +1,7 @@
 package ora
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql"
 	"database/sql/driver"
@@ -19,15 +20,16 @@ type Rows struct {
 func (rows *Rows) Next(dest []driver.Value) (err error) {
 	// 1. fetch result in result binds,
 	// TODO: manipulate fetch_size - prefech
-	ret, _, _ := oci_OCIStmtFetch2.Call(rows.stmt.ptr, rows.stmt.conn.err.ptr, 1, OCI_DEFAULT, 0, OCI_DEFAULT)
+	ret, ret2, err := oci_OCIStmtFetch2.Call(rows.stmt.ptr, rows.stmt.conn.err.ptr, 1, OCI_DEFAULT, 0, OCI_DEFAULT)
 	switch int16(ret) {
 	case OCI_SUCCESS:
 		// skip
 	case OCI_NO_DATA:
 		return sql.ErrNoRows
 	default:
-		if err = rows.stmt.conn.cerr(ret, 0, nil); err != nil {
-			return
+		if err = rows.stmt.conn.cerr(ret, ret2, err); err != nil {
+			trace.Printf("OCIStmtFetch2(...) -> %s", err)
+			return err
 		}
 	}
 
@@ -38,7 +40,7 @@ func (rows *Rows) Next(dest []driver.Value) (err error) {
 			dest[i] = string(d.valPtr.([]byte))
 		case OCI_TYP_VARCHAR, OCI_TYP_CHAR:
 			if d.ind != 0 {
-				dest[i] = sql.NullString{} // in oracle null is same as empty string
+				dest[i] = nil
 				break
 			}
 			buf := d.valPtr.([]byte)
@@ -46,29 +48,34 @@ func (rows *Rows) Next(dest []driver.Value) (err error) {
 			dest[i] = string(buf[:n])
 		case OCI_TYP_LONG:
 			if d.ind != 0 {
-				dest[i] = sql.NullString{} // in oracle null is same as empty string
+				dest[i] = nil
 				break
 			}
 			buf := d.valPtr.([]byte)
 			dest[i] = string(buf[:d.rlen])
 		case OCI_TYP_CLOB:
-			lob := d.valPtr.(*Lob)
+			if d.ind != 0 {
+				dest[i] = nil
+				break
+			}
 
+			lob := d.valPtr.(*Lob)
 			r, err := lob.OpenReader()
 			if err != nil {
 				return err
 			}
-			defer r.Close()
 
-			buf, err := ioutil.ReadAll(r)
+			buf, err := ioutil.ReadAll(bufio.NewReader(r))
 			if err != nil {
+				r.Close()
 				return err
 			}
+			r.Close()
 
 			dest[i] = string(buf)
 		case OCI_TYP_NUMBER:
 			if d.ind != 0 {
-				dest[i] = sql.NullFloat64{}
+				dest[i] = nil
 				break
 			}
 			if sizeOfInt == 4 {
@@ -91,6 +98,7 @@ func (rows *Rows) Next(dest []driver.Value) (err error) {
 			dest[i] = time.Date(year, month, int(p[3]), int(p[4]-1), int(p[5]-1), int(p[6]-1), 0, time.Local)
 		}
 	}
+
 	return nil
 }
 
