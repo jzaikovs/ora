@@ -34,7 +34,7 @@ func (lob *Lob) OpenReader() (lobr *LobReader, err error) {
 // LobReader implements reader for oracle lob reading
 type LobReader struct {
 	*Lob
-	offset uint64
+	offset int
 }
 
 // Read reads from lob
@@ -55,10 +55,12 @@ func (lob *LobReader) Read(buf []byte) (n int, err error) {
 		null,
 		null,
 		null,
+		null,
 		SQLCS_IMPLICIT))
+
 	n = int(amount)
-	lob.offset += uint64(amount)
-	//trace.Println("FETCHED", n)
+	lob.offset += n
+
 	if n == 0 {
 		err = io.EOF
 	}

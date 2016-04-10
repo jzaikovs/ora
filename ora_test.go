@@ -92,47 +92,6 @@ func TestQuery(t *testing.T) {
 	}
 }
 
-func TestLob(t *testing.T) {
-	if _, err := db.Exec("delete go_test"); err != nil {
-		t.Error(err)
-		return
-	}
-
-	expected := []string{"helloworld", ""}
-
-	for _, e := range expected {
-		if _, err := db.Exec("insert into go_test (lobcol) values(:1)", e); err != nil {
-			t.Error(err)
-			return
-		}
-	}
-
-	db.Exec("commit")
-
-	err := query("SELECT id, name, lobcol FROM go_test", func(row *sql.Rows) (err error) {
-		var (
-			id   sql.NullFloat64
-			name sql.NullString
-			lob  sql.NullString
-		)
-
-		if err = row.Scan(&id, &name, &lob); err != nil {
-			t.Error(err)
-			return
-		}
-
-		if lob.String != expected[0] {
-			t.Error("clob fetch not working")
-		}
-		expected = expected[1:]
-		return
-	})
-
-	if err != nil {
-		t.Error(err)
-	}
-}
-
 func TestExecInsert(t *testing.T) {
 	var err error
 
