@@ -34,14 +34,14 @@ func (lob *Lob) OpenReader() (lobr *LobReader, err error) {
 // LobReader implements reader for oracle lob reading
 type LobReader struct {
 	*Lob
-	offset int
+	offset   int
+	needData bool
 }
 
 // Read reads from lob
 func (lob *LobReader) Read(buf []byte) (n int, err error) {
 	amount := int32(len(buf))
-
-	err = lob.conn.cerr(oci_OCILobRead.Call(
+	r1, r2, err2 := oci_OCILobRead.Call(
 		lob.conn.serv.ptr, // service
 		lob.conn.err.ptr,  //error
 		lob.ptr,           // ptr
@@ -56,15 +56,23 @@ func (lob *LobReader) Read(buf []byte) (n int, err error) {
 		null,
 		null,
 		null,
-		SQLCS_IMPLICIT))
+		SQLCS_IMPLICIT)
 
-	n = int(amount)
-	lob.offset += n
-
-	if n == 0 {
-		err = io.EOF
+	if err := lob.conn.cerr(r1, r2, err2); err != nil {
+		return 0, err
 	}
 
+	n = int(amount)
+
+	if n <= 0 {
+		return 0, io.EOF
+	}
+
+	if !lob.needData {
+		lob.offset += n
+	}
+
+	lob.needData = r1 == OCI_NEED_DATA
 	return
 }
 
