@@ -2,7 +2,6 @@ package ora
 
 import (
 	"bufio"
-	"bytes"
 	"database/sql"
 	"database/sql/driver"
 	"io/ioutil"
@@ -38,15 +37,7 @@ func (rows *Rows) Next(dest []driver.Value) (err error) {
 		switch d.typ {
 		case OCI_TYP_ROWID:
 			dest[i] = string(d.valPtr.([]byte))
-		case OCI_TYP_VARCHAR, OCI_TYP_CHAR:
-			if d.ind != 0 {
-				dest[i] = nil
-				break
-			}
-			buf := d.valPtr.([]byte)
-			n := bytes.IndexByte(buf, 0) // find null byte
-			dest[i] = string(buf[:n])
-		case OCI_TYP_LONG:
+		case OCI_TYP_VARCHAR, OCI_TYP_CHAR, OCI_TYP_LONG:
 			if d.ind != 0 {
 				dest[i] = nil
 				break

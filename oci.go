@@ -38,12 +38,13 @@ const (
 )
 
 const (
-	OCI_ATTR_DATA_SIZE   = 1
-	OCI_ATTR_DATA_TYPE   = 2
-	OCI_ATTR_DISP_SIZE   = 3
-	OCI_ATTR_NAME        = 4
-	OCI_ATTR_ROWID       = 19
-	OCI_ATTR_FETCH_ROWID = 448
+	OCI_ATTR_DATA_SIZE     = 1
+	OCI_ATTR_DATA_TYPE     = 2
+	OCI_ATTR_DISP_SIZE     = 3
+	OCI_ATTR_NAME          = 4
+	OCI_ATTR_PREFETCH_ROWS = 11
+	OCI_ATTR_ROWID         = 19
+	OCI_ATTR_FETCH_ROWID   = 448
 )
 
 // internal data types: http://docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci03typ.htm#CEGGBDFC

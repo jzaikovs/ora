@@ -8,6 +8,9 @@ import (
 // MaxLongSize is size of buffer allocated for long type, (TODO: can this be improved to dynamic allocation?)
 var MaxLongSize = 100000
 
+// PrefetchRows is row count to prefetch
+var PrefetchRows = 1000
+
 // Statement handles single SQL statement
 type Statement struct {
 	*ociHandle
@@ -105,6 +108,10 @@ func (stmt *Statement) exec(n int) (err error) {
 
 // Query executes query statement
 func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
+	if err := stmt.SetPrefrech(PrefetchRows); err != nil {
+		return nil, err
+	}
+
 	if err := stmt.bind(args); err != nil {
 		return nil, err
 	}
@@ -195,6 +202,18 @@ func (stmt *Statement) prepare(query string) (err error) {
 		//stmt.Close() // free alloc
 	}
 	return
+}
+
+// SetPrefrech sets actual prefetch
+func (stmt *Statement) SetPrefrech(n int) (err error) {
+	val := int32(n)
+	return stmt.conn.cerr(oci_OCIAttrSet.Call(
+		stmt.ptr,
+		uintptr(OCI_HTYPE_STMT),
+		int32Ref(&val),
+		uintptr(sizeOfInt),
+		uintptr(OCI_ATTR_PREFETCH_ROWS),
+		stmt.conn.err.ptr))
 }
 
 // ColumnConverter converting specific value for sending value to database
