@@ -11,7 +11,7 @@ import (
 
 var (
 	trace            = log.New(os.Stdout, "TRACE:", log.Lshortfile)
-	patternEzconnect = regexp.MustCompile(`^((.*?)/(.*?))?(@|//)(.*/.*)$`)
+	patternEzconnect = regexp.MustCompile(`^((.*?)/(.*?))?(@|//)(.*(/.*)?)$`)
 )
 
 func init() {
@@ -35,7 +35,7 @@ func Open(connectionString string) (*Conn, error) {
 	// for now support only ezconnect connect string
 	matches := patternEzconnect.FindSubmatch([]byte(connectionString))
 	if len(matches) == 0 {
-		return nil, errors.New("only ezconnect connect string is supported")
+		return nil, errors.New("unsupported connect string")
 	}
 
 	username := matches[2]
