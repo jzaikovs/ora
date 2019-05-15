@@ -137,7 +137,9 @@ func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
 			buf := make([]byte, 18) // rowid at most is 18 bytes long
 			err = d.define(pos, buf, len(buf), SQLT_AFC)
 		case OCI_TYP_VARCHAR, OCI_TYP_CHAR:
-			buf := make([]byte, d.length+1) // make buffer where result is stored + 1 null byte
+			// oracle doesn't return correct size 
+			// if client side encoding uses more bytes than server side to encode single character
+			buf := make([]byte, d.length * 2 + 2) // make buffer where result is stored + null byte		
 			err = d.define(pos, buf, len(buf), SQLT_STR)
 		case OCI_TYP_LONG:
 			buf := make([]byte, MaxLongSize)
