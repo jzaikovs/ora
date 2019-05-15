@@ -49,26 +49,11 @@ func (descr *Descriptor) getName() string {
 	return string(name[:nameLen])
 }
 
-func (descr *Descriptor) getLen() int {
-	sem := 0
-	// Retrieve the length semantics for the column
-	if err := descr.stmt.conn.cerr(oci_OCIAttrGet.Call(descr.ptr, OCI_DTYPE_PARAM, intRef(&sem), 0, OCI_ATTR_CHAR_USED, descr.stmt.conn.err.ptr)); err != nil {
+func (descr *Descriptor) getLen() (n int) {
+	if err := descr.stmt.conn.cerr(oci_OCIAttrGet.Call(descr.ptr, OCI_DTYPE_PARAM, intRef(&n), 0, OCI_ATTR_DATA_SIZE, descr.stmt.conn.err.ptr)); err != nil {
 		panic(err)
 	}
-
-	w := 0
-
-	if sem > 0 {
-		// Retrieve the column width in characters
-		if err := descr.stmt.conn.cerr(oci_OCIAttrGet.Call(descr.ptr, OCI_DTYPE_PARAM, intRef(&w), 0, OCI_ATTR_CHAR_SIZE, descr.stmt.conn.err.ptr)); err != nil {
-			panic(err)
-		}
-	} else {
-		if err := descr.stmt.conn.cerr(oci_OCIAttrGet.Call(descr.ptr, OCI_DTYPE_PARAM, intRef(&w), 0, OCI_ATTR_DATA_SIZE, descr.stmt.conn.err.ptr)); err != nil {
-			panic(err)
-		}
-	}
-	return w
+	return n
 }
 
 func (descr *Descriptor) define(pos int, addr interface{}, size int, typ int) error {
