@@ -4,26 +4,39 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"errors"
+	"io/ioutil"
 	"log"
-	"os"
 	"regexp"
 )
 
+// DriverName is name used to register driver
+const DriverName = "ora"
+
 var (
-	trace            = log.New(os.Stdout, "TRACE:", log.Lshortfile)
-	patternEzconnect = regexp.MustCompile(`^((.*?)/(.*?))?(@|//)(.*(/.*)?)$`)
+	// trace = log.New(os.Stdout, "DEBUG:", log.Lshortfile)
+	trace            = log.New(ioutil.Discard, "DEBUG:", log.Lshortfile)
+	patternEZConnect = regexp.MustCompile(`^((.*?)/(.*?))?(@|//)(.*(/.*)?)$`)
 )
 
 func init() {
-	sql.Register("ora", driverStruct{})
+	sql.Register(DriverName, Driver{})
 }
 
-type driverStruct struct {
+type ConnStd struct {
+	*Conn
 }
 
-// Function implements driver.Open interface
-func (driverStruct) Open(connectionString string) (driver.Conn, error) {
-	return Open(connectionString)
+type Driver struct {
+}
+
+// Open implements driver.Open interface
+func (Driver) Open(connectionString string) (driver.Conn, error) {
+	conn, err := Open(connectionString)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ConnStd{conn}, nil
 }
 
 // Open creates new connection
@@ -33,7 +46,7 @@ func Open(connectionString string) (*Conn, error) {
 	}
 
 	// for now support only ezconnect connect string
-	matches := patternEzconnect.FindSubmatch([]byte(connectionString))
+	matches := patternEZConnect.FindSubmatch([]byte(connectionString))
 	if len(matches) == 0 {
 		return nil, errors.New("unsupported connect string")
 	}
@@ -52,6 +65,5 @@ func Open(connectionString string) (*Conn, error) {
 		return nil, err
 	}
 
-	//logLine("connected...")
 	return conn, nil
 }

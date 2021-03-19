@@ -1,49 +1,44 @@
 package ora
 
-import "database/sql/driver"
+import (
+	"database/sql/driver"
+)
 
-// QueryResult handles query result, it adds more functions for result than standart database/sql
+// QueryResult handles query result, it adds more functions for result than standard database/sql
 type QueryResult struct {
 	stmt    driver.Stmt
 	rows    *Rows
-	dest    []driver.Value
-	fetched int
+	lastRow []driver.Value
 }
 
 func newQueryResult(rows *Rows, stmt driver.Stmt) *QueryResult {
 	qr := new(QueryResult)
 	qr.rows = rows
 	qr.stmt = stmt
-	qr.dest = make([]driver.Value, len(qr.rows.descr))
+	qr.lastRow = make([]driver.Value, len(qr.rows.descriptors))
 	return qr
 }
 
-// Next fetchers next row in query result
+// Next fetchers next binds in query result
 func (qr *QueryResult) Next() error {
-	qr.dest = make([]driver.Value, len(qr.rows.descr))
-	return qr.rows.Next(qr.dest)
+	// trace.Println("qr.Next")
+	qr.lastRow = make([]driver.Value, len(qr.rows.descriptors))
+	return qr.rows.Next(qr.lastRow)
 }
 
 func (qr *QueryResult) Close() (err error) {
-	qr.stmt.Close()
+	// trace.Println("qr.Close")
 	return qr.rows.Close()
 }
 
-func (qr *QueryResult) Scan(x ...interface{}) (err error) {
-	for i, v := range qr.dest {
-		x[i] = v
-	}
-	return
-}
-
 func (qr *QueryResult) Values() (row []interface{}, err error) {
-	row = make([]interface{}, len(qr.dest))
-	for i, v := range qr.dest {
+	row = make([]interface{}, len(qr.lastRow))
+	for i, v := range qr.lastRow {
 		row[i] = v
 	}
 	return
 }
 
 func (qr *QueryResult) FieldDescriptions() (fields []*Descriptor) {
-	return qr.rows.descr
+	return qr.rows.descriptors
 }

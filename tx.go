@@ -7,10 +7,14 @@ type Transaction struct {
 
 // Commit implements transaction commit
 func (tx *Transaction) Commit() error {
-	return tx.conn.cerr(oci_OCITransCommit.Call(tx.conn.serv.ptr, tx.conn.err.ptr, OCI_DEFAULT))
+	err := tx.conn.cerr(oci_OCITransCommit.Call(tx.conn.serv.ptr, tx.conn.err.ptr, OCI_DEFAULT))
+	tx.conn.tx = nil
+	return err
 }
 
 // Rollback implements transaction rollback
 func (tx *Transaction) Rollback() error {
-	return tx.conn.cerr(oci_OCITransRollback.Call(tx.conn.serv.ptr, tx.conn.err.ptr, OCI_DEFAULT))
+	err := tx.conn.cerr(oci_OCITransRollback.Call(tx.conn.serv.ptr, tx.conn.err.ptr, OCI_DEFAULT))
+	tx.conn.tx = nil
+	return err
 }

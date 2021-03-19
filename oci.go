@@ -1,7 +1,8 @@
 package ora
 
 const (
-	OCI_DEFAULT = 0
+	OCI_DEFAULT  = 0
+	OCI_THREADED = 1
 )
 
 // http://docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci02bas.htm#g466063
@@ -42,6 +43,9 @@ const (
 	OCI_ATTR_DATA_TYPE     = 2
 	OCI_ATTR_DISP_SIZE     = 3
 	OCI_ATTR_NAME          = 4
+	OCI_ATTR_PRECISION     = 5
+	OCI_ATTR_SCALE         = 6
+	OCI_ATTR_ROW_COUNT     = 9
 	OCI_ATTR_PREFETCH_ROWS = 11
 	OCI_ATTR_ROWID         = 19
 	OCI_ATTR_FETCH_ROWID   = 448
@@ -71,16 +75,22 @@ const (
 
 // external data types http://docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci03typ.htm#LNOCI16271
 const (
-	SQLT_CHR  = 1  // [n]byte
-	SQLT_NUM  = 2  // float64?
-	SQLT_INT  = 3  // int64
-	SQLT_FLT  = 4  // float64
-	SQLT_STR  = 5  // [n+1]byte
-	SQLT_LNG  = 8  // [n]char
-	SQLT_DAT  = 12 // [7]byte
-	SQLT_AFC  = 96 // [n]char
-	SQLT_CLOB = 112
-	SQLT_RDD  = 104
+	SQLT_CHR     = 1  // [n]byte
+	SQLT_NUM     = 2  // float64?
+	SQLT_INT     = 3  // int32
+	SQLT_FLT     = 4  // float32
+	SQLT_STR     = 5  // [n+1]byte
+	SQLT_VNU     = 6  // VARNUM byte[22]
+	SQLT_LNG     = 8  // [n]char RAW
+	SQLT_DAT     = 12 // [7]byte
+	SQLT_BFLOAT  = 21 // float32
+	SQLT_BDOUBLE = 22 // float64
+	SQLT_BIN     = 23 // [n]byte
+	SQLT_UIN     = 68 // uint32
+	SQLT_AFC     = 96 // [n]char
+	SQLT_CLOB    = 112
+	SQLT_BLOB    = 113
+	SQLT_RDD     = 104
 )
 
 // http://docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci02bas.htm#LNOCI16220
@@ -120,30 +130,39 @@ const (
 	OCI_LOB_FULLREAD      = 6
 )
 
+const (
+	OCI_TEMP_BLOB = 1
+	OCI_TEMP_CLOB = 2
+)
+
 var (
-	oci_OCIAttrGet         = ociLibrary.NewProc("OCIAttrGet")
-	oci_OCIAttrSet         = ociLibrary.NewProc("OCIAttrSet")
-	oci_OCIBindByPos       = ociLibrary.NewProc("OCIBindByPos")
-	oci_OCIDefineByPos     = ociLibrary.NewProc("OCIDefineByPos")
-	oci_OCIDescriptorAlloc = ociLibrary.NewProc("OCIDescriptorAlloc")
-	oci_OCIDescriptorFree  = ociLibrary.NewProc("OCIDescriptorFree")
-	oci_OCIEnvCreate       = ociLibrary.NewProc("OCIEnvCreate")
-	oci_OCIErrorGet        = ociLibrary.NewProc("OCIErrorGet")
-	oci_OCIHandleAlloc     = ociLibrary.NewProc("OCIHandleAlloc")
-	oci_OCIHandleFree      = ociLibrary.NewProc("OCIHandleFree")
-	oci_OCIInitialize      = ociLibrary.NewProc("OCIInitialize")
-	oci_OCILogoff          = ociLibrary.NewProc("OCILogoff")
-	oci_OCILogon           = ociLibrary.NewProc("OCILogon")
-	oci_OCIParamGet        = ociLibrary.NewProc("OCIParamGet")
-	oci_OCIRowidToChar     = ociLibrary.NewProc("OCIRowidToChar")
-	oci_OCIStmtExecute     = ociLibrary.NewProc("OCIStmtExecute")
-	oci_OCIStmtFetch2      = ociLibrary.NewProc("OCIStmtFetch2")
-	oci_OCIStmtPrepare2    = ociLibrary.NewProc("OCIStmtPrepare2") // this allows statement caching
-	oci_OCIStmtRelease     = ociLibrary.NewProc("OCIStmtRelease")
-	oci_OCITransCommit     = ociLibrary.NewProc("OCITransCommit")
-	oci_OCITransRollback   = ociLibrary.NewProc("OCITransRollback")
-	oci_OCILobRead         = ociLibrary.NewProc("OCILobRead")
-	oci_OCILobRead2        = ociLibrary.NewProc("OCILobRead2")
-	oci_OCILobOpen         = ociLibrary.NewProc("OCILobOpen")
-	oci_OCILobClose        = ociLibrary.NewProc("OCILobClose")
+	oci_OCIAttrGet            = ociLibrary.NewProc("OCIAttrGet")
+	oci_OCIAttrSet            = ociLibrary.NewProc("OCIAttrSet")
+	oci_OCIBindByPos          = ociLibrary.NewProc("OCIBindByPos")
+	oci_OCIBreak              = ociLibrary.NewProc("OCIBreak")
+	oci_OCIDefineByPos        = ociLibrary.NewProc("OCIDefineByPos")
+	oci_OCIDescriptorAlloc    = ociLibrary.NewProc("OCIDescriptorAlloc")
+	oci_OCIDescriptorFree     = ociLibrary.NewProc("OCIDescriptorFree")
+	oci_OCIEnvCreate          = ociLibrary.NewProc("OCIEnvCreate")
+	oci_OCIErrorGet           = ociLibrary.NewProc("OCIErrorGet")
+	oci_OCIHandleAlloc        = ociLibrary.NewProc("OCIHandleAlloc")
+	oci_OCIHandleFree         = ociLibrary.NewProc("OCIHandleFree")
+	oci_OCILobClose           = ociLibrary.NewProc("OCILobClose")
+	oci_OCILobCreateTemporary = ociLibrary.NewProc("OCILobCreateTemporary")
+	oci_OCILobFreeTemporary   = ociLibrary.NewProc("OCILobFreeTemporary")
+	oci_OCILobOpen            = ociLibrary.NewProc("OCILobOpen")
+	oci_OCILobRead            = ociLibrary.NewProc("OCILobRead")
+	oci_OCILobWriteAppend     = ociLibrary.NewProc("OCILobWriteAppend")
+	oci_OCILogoff             = ociLibrary.NewProc("OCILogoff")
+	oci_OCILogon              = ociLibrary.NewProc("OCILogon")
+	oci_OCIParamGet           = ociLibrary.NewProc("OCIParamGet")
+	oci_OCIPing               = ociLibrary.NewProc("OCIPing")
+	oci_OCIReset              = ociLibrary.NewProc("OCIReset")
+	oci_OCIStmtExecute        = ociLibrary.NewProc("OCIStmtExecute")
+	oci_OCIStmtFetch2         = ociLibrary.NewProc("OCIStmtFetch2")
+	oci_OCIStmtPrepare2       = ociLibrary.NewProc("OCIStmtPrepare2") // this allows statement caching
+	oci_OCIStmtRelease        = ociLibrary.NewProc("OCIStmtRelease")
+	oci_OCITransStart         = ociLibrary.NewProc("OCITransStart")
+	oci_OCITransCommit        = ociLibrary.NewProc("OCITransCommit")
+	oci_OCITransRollback      = ociLibrary.NewProc("OCITransRollback")
 )

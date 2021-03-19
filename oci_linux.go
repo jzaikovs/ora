@@ -1,6 +1,6 @@
 package ora
 
-import "github.com/rainycape/dl"
+import "github.com/sergewu/dl"
 
 var (
 	ociLibrary = NewLazyDLL("libclntsh.so")

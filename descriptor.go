@@ -8,70 +8,78 @@ import (
 // http://web.stanford.edu/dept/itss/docs/oracle/10gR2/appdev.102/b14250/oci04sql.htm#sthref629
 type Descriptor struct {
 	*ociHandle
-	stmt   *Statement // statement, TODO: do we need this?
-	typ    int
-	name   string
-	length int
-	rlen   int // offset if fetching large objects
-	ind    int // indicator, used to determin if result is null value
-	valPtr interface{}
+	stmt        *Statement
+	typ         int
+	name        string
+	length      int
+	rlen        int // offset if fetching large objects
+	ind         int // indicator, used to determin if result is null value
+	prec        int
+	scale       int
+	displaySize int
+	valPtr      interface{}
 }
 
-func newDescriptor(stmt *Statement) *Descriptor {
-	return &Descriptor{ociHandle: &ociHandle{}, stmt: stmt}
-}
-
-func (descr *Descriptor) Type() int {
-	return descr.typ
-
-}
-
-func (descr *Descriptor) Name() string {
-	return descr.name
-}
-
-func (descr *Descriptor) getTyp() (t int) {
-	err := descr.stmt.conn.cerr(oci_OCIAttrGet.Call(descr.ptr, OCI_DTYPE_PARAM, intRef(&t), 0, OCI_ATTR_DATA_TYPE, descr.stmt.conn.err.ptr))
-	if err != nil {
-		panic(err)
+func newDescriptor(stmt *Statement, pos int) (d *Descriptor, err error) {
+	d = &Descriptor{
+		ociHandle: &ociHandle{},
+		stmt:      stmt,
 	}
+
+	if err = stmt.conn.cerr(oci_OCIParamGet.Call(stmt.ptr, OCI_HTYPE_STMT, stmt.conn.err.ptr, ref(&d.ptr), uintptr(pos))); err != nil {
+		//trace.Printf("OCIParamGet(..., %d) -> %s", pos, err)
+		return
+	}
+
+	if d.name, err = d.getName(); err != nil {
+		return
+	}
+
+	if d.typ, err = d.getIntAttr(OCI_ATTR_DATA_TYPE); err != nil {
+		return
+	}
+
+	if d.length, err = d.getIntAttr(OCI_ATTR_DATA_SIZE); err != nil {
+		return
+	}
+
+	if d.displaySize, err = d.getIntAttr(OCI_ATTR_DISP_SIZE); err != nil {
+		return
+	}
+
+	if d.prec, err = d.getIntAttr(OCI_ATTR_PRECISION); err != nil {
+		return
+	}
+
+	if d.scale, err = d.getIntAttr(OCI_ATTR_SCALE); err != nil {
+		return
+	}
+
 	return
 }
 
-func (descr *Descriptor) getName() string {
-	name := make([]byte, 512) // TODO: what is max length of result column name?
-	nameLen := 0
-
-	err := descr.stmt.conn.cerr(oci_OCIAttrGet.Call(descr.ptr, OCI_DTYPE_PARAM, bufRef(&name), intRef(&nameLen), OCI_ATTR_NAME, descr.stmt.conn.err.ptr))
-	if err != nil {
-		panic(err)
-	}
-	return string(name[:nameLen])
+func (descriptor *Descriptor) getIntAttr(attr int) (t int, err error) {
+	err = descriptor.stmt.conn.cerr(oci_OCIAttrGet.Call(descriptor.ptr, OCI_DTYPE_PARAM, intRef(&t), 0, uintptr(attr), descriptor.stmt.conn.err.ptr))
+	return
 }
 
-func (descr *Descriptor) getLen() (n int) {
-	if err := descr.stmt.conn.cerr(oci_OCIAttrGet.Call(descr.ptr, OCI_DTYPE_PARAM, intRef(&n), 0, OCI_ATTR_DATA_SIZE, descr.stmt.conn.err.ptr)); err != nil {
-		panic(err)
+func (descriptor *Descriptor) getName() (name string, err error) {
+	buf := make([]byte, 512) // TODO: what is max length of result column name?
+	bufLen := 0
+
+	if err = descriptor.stmt.conn.cerr(oci_OCIAttrGet.Call(descriptor.ptr, OCI_DTYPE_PARAM, bufRef(&buf), intRef(&bufLen), OCI_ATTR_NAME, descriptor.stmt.conn.err.ptr)); err != nil {
+		return
 	}
-	return n
+	name = string(buf[:bufLen])
+	return
 }
 
-func (descr *Descriptor) define(pos int, addr interface{}, size int, typ int) error {
+func (descriptor *Descriptor) define(pos int, addr interface{}, size int, typ int) error {
 	if ptr, ok := addr.(uintptr); ok {
-		return descr.stmt.conn.cerr(oci_OCIDefineByPos.Call(descr.stmt.ptr, descr.ref(), descr.stmt.conn.err.ptr, uintptr(pos), ptr, uintptr(size), uintptr(typ), intRef(&descr.ind), intRef(&descr.rlen), 0, 0))
+		return descriptor.stmt.conn.cerr(oci_OCIDefineByPos.Call(descriptor.stmt.ptr, descriptor.ref(), descriptor.stmt.conn.err.ptr, uintptr(pos), ptr, uintptr(size), uintptr(typ), intRef(&descriptor.ind), intRef(&descriptor.rlen), 0, 0))
 	}
 
-	descr.valPtr = addr
-	ptr := reflect.ValueOf(descr.valPtr).Pointer()
-	return descr.stmt.conn.cerr(oci_OCIDefineByPos.Call(descr.stmt.ptr, descr.ref(), descr.stmt.conn.err.ptr, uintptr(pos), ptr, uintptr(size), uintptr(typ), intRef(&descr.ind), intRef(&descr.rlen), 0, 0))
+	descriptor.valPtr = addr
+	ptr := reflect.ValueOf(descriptor.valPtr).Pointer()
+	return descriptor.stmt.conn.cerr(oci_OCIDefineByPos.Call(descriptor.stmt.ptr, descriptor.ref(), descriptor.stmt.conn.err.ptr, uintptr(pos), ptr, uintptr(size), uintptr(typ), intRef(&descriptor.ind), intRef(&descriptor.rlen), 0, 0))
 }
-
-/*
-func (descr descriptor) rowid() *oci_handle {
-	h := descr.stmt.conn.alloc_descr()
-	if err := descr.stmt.conn.cerr(oci_OCIAttrGet.Call(descr.stmt.ptr, OCI_HTYPE_STMT, h.ref(), 0, OCI_ATTR_ROWID, descr.stmt.conn.err.ptr)); err != nil {
-		panic(err)
-	}
-	return h
-}
-*/

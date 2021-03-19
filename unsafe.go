@@ -1,7 +1,6 @@
 package ora
 
 import (
-	"log"
 	"unsafe"
 )
 
@@ -9,11 +8,15 @@ const null = uintptr(0)
 
 const sizeOfInt = int(unsafe.Sizeof(int(0)))
 
-func logLine(args ...interface{}) {
-	log.Println(args...)
+func intRef(p *int) uintptr {
+	return uintptr(unsafe.Pointer(p))
 }
 
-func intRef(p *int) uintptr {
+func uintRef(p *uint) uintptr {
+	return uintptr(unsafe.Pointer(p))
+}
+
+func float32Ref(p *float32) uintptr {
 	return uintptr(unsafe.Pointer(p))
 }
 

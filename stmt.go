@@ -2,56 +2,118 @@ package ora
 
 import (
 	"database/sql/driver"
+	"errors"
+	"fmt"
 	"time"
 )
 
 // MaxLongSize is size of buffer allocated for long type, (TODO: can this be improved to dynamic allocation?)
 var MaxLongSize = 100000
 
-// PrefetchRows is row count to prefetch
+// PrefetchRows is binds count to prefetch
 var PrefetchRows = 1000
 
 // Statement handles single SQL statement
 type Statement struct {
 	*ociHandle
+	id     int
 	conn   *Conn
 	tx     *Transaction
 	binds  []interface{} // will hold pointers to every bind variable
 	closed bool
+	rows   *Rows
+}
+
+// newStatement allocates new statement
+func (conn *Conn) newStatement(query string) (stmt *Statement, err error) {
+	var h *ociHandle
+	// allocate prepare statement, later we will need to free it
+	if h, err = conn.alloc(OCI_HTYPE_STMT); err != nil {
+		return nil, err
+	}
+
+	stmt = &Statement{
+		conn:      conn,
+		tx:        conn.tx,
+		ociHandle: h,
+		id:        len(conn.statements) + 1,
+	}
+
+	conn.statements[stmt.id] = stmt
+
+	if err = stmt.prepare(query); err != nil {
+		if err2 := stmt.Close(); err2 != nil {
+			return nil, err2
+		}
+	}
+
+	return
 }
 
 // Close closes statement
 func (stmt *Statement) Close() error {
+	// trace.Println("stmt.Close")
 	if stmt.closed {
-		return nil
+		return errors.New("already closed")
+	}
+
+	delete(stmt.conn.statements, stmt.id)
+	return stmt.close()
+}
+
+func (stmt *Statement) close() error {
+	// trace.Println("stmt.close")
+	if stmt.closed {
+		return errors.New("already closed")
 	}
 
 	stmt.closed = true
-	return stmt.conn.cerr(oci_OCIStmtRelease.Call(stmt.ptr, stmt.conn.err.ptr, 0, 0, OCI_DEFAULT))
+	err := stmt.conn.cerr(oci_OCIStmtRelease.Call(stmt.ptr, stmt.conn.err.ptr, 0, 0, OCI_DEFAULT))
+	stmt.free()
+	return err
 }
 
-// NumInput returns number of imput parameters in statement
+// NumInput returns number of input parameters in statement
 func (stmt *Statement) NumInput() int {
-	return -1 // TODO: count input parameters
+	return -1
 }
 
 // Exec executes statement with passed binds
 func (stmt *Statement) Exec(args []driver.Value) (driver.Result, error) {
+	// fmt.Println("stmt.Exec")
 	if err := stmt.bind(args); err != nil {
 		return nil, err
 	}
+
+	// for _, b := range stmt.binds {
+	// 	switch v := b.(type) {
+	// 	case *Lob:
+	// 		defer v.free()
+	// 		defer v.freeTemp()
+	// 	}
+	// }
 
 	if err := stmt.exec(1); err != nil {
 		return nil, err
 	}
 
-	// closing this is failing with invalid handle error,
-	// OCIStmtExecute on non SELECT will close handle, can't find info about this case
-	//if err := stmt.Close(); err != nil {
-	//	return nil, err
-	//}
+	for i, vp := range args {
+		switch v := vp.(type) {
+		case *int:
+			x := stmt.binds[i].(*int)
+			*v = *x
+		case *int64:
+			x := stmt.binds[i].(*int64)
+			*v = *x
+		}
+	}
 
-	return Result{}, nil
+	return stmt.result(), nil
+}
+
+func (stmt *Statement) result() (r Result) {
+	r.err = stmt.conn.cerr(oci_OCIAttrGet.Call(stmt.ptr, OCI_HTYPE_STMT, int64Ref(&r.rowsAffected), 0, OCI_ATTR_ROW_COUNT, stmt.conn.err.ptr))
+	return
 }
 
 func (stmt *Statement) bind(args []driver.Value) (err error) {
@@ -64,33 +126,88 @@ func (stmt *Statement) bind(args []driver.Value) (err error) {
 		// and OCI will pass some random data from memory
 		switch val := arg.(type) { // GC will discard val if not referenced somewhere
 		case time.Time:
-			p := make([]byte, 7)
-			p[0] = byte(int(val.Year()/100)) + 100
-			p[1] = byte(val.Year()%100) + 100
-			p[2] = byte(val.Month())
-			p[3] = byte(val.Day())
-			p[4] = byte(val.Hour()) + 1
-			p[5] = byte(val.Minute()) + 1
-			p[6] = byte(val.Second()) + 1
-
-			stmt.binds[i] = p
-			err = stmt.conn.cerr(oci_OCIBindByPos.Call(stmt.ptr, ref(&bnd), stmt.conn.err.ptr, uintptr(i+1), bufAddr(p), uintptr(7), SQLT_DAT, 0, 0, 0, 0, 0, OCI_DEFAULT))
-		case int64:
-			x := int(val)
-			stmt.binds[i] = &x
-			err = stmt.conn.cerr(oci_OCIBindByPos.Call(stmt.ptr, ref(&bnd), stmt.conn.err.ptr, uintptr(i+1), intRef(&x), uintptr(sizeOfInt), SQLT_INT, 0, 0, 0, 0, 0, OCI_DEFAULT))
-		case string:
-			buf := append([]byte(val), 0)
+			buf := timeToOraBytes(val)
 			stmt.binds[i] = buf
-			err = stmt.conn.cerr(oci_OCIBindByPos.Call(stmt.ptr, ref(&bnd), stmt.conn.err.ptr, uintptr(i+1), bufAddr(buf), uintptr(len(buf)), SQLT_STR, 0, 0, 0, 0, 0, OCI_DEFAULT))
+			err = stmt.bindPyPos(i+1, &bnd, bufAddr(buf), len(buf), SQLT_DAT)
+		case int:
+			x := val
+			stmt.binds[i] = &x
+			err = stmt.bindPyPos(i+1, &bnd, intRef(&x), sizeOfInt, SQLT_INT)
+		case *int:
+			stmt.binds[i] = val
+			err = stmt.bindPyPos(i+1, &bnd, intRef(val), sizeOfInt, SQLT_INT)
+		case uint:
+			x := val
+			stmt.binds[i] = &x
+			err = stmt.bindPyPos(i+1, &bnd, uintRef(&x), sizeOfInt, SQLT_INT)
+		case int64:
+			x := val
+			stmt.binds[i] = &x
+			err = stmt.bindPyPos(i+1, &bnd, int64Ref(&x), 8, SQLT_INT)
+		case uint64:
+			x := val
+			stmt.binds[i] = &x
+			err = stmt.bindPyPos(i+1, &bnd, uint64Ref(&x), 8, SQLT_INT)
+		case float32:
+			x := val
+			stmt.binds[i] = &x
+			err = stmt.bindPyPos(i+1, &bnd, float32Ref(&x), 4, SQLT_FLT)
+		case float64:
+			x := val
+			stmt.binds[i] = &x
+			err = stmt.bindPyPos(i+1, &bnd, float64Ref(&x), 8, SQLT_FLT)
+		case string:
+			buf := append([]byte(val), 0) // null terminated string
+			stmt.binds[i] = buf
+			err = stmt.bindPyPos(i+1, &bnd, bufAddr(buf), len(buf), SQLT_STR)
+		case []byte:
+			buf := val
+			stmt.binds[i] = buf
+			err = stmt.bindPyPos(i+1, &bnd, bufAddr(buf), len(buf), SQLT_BIN)
+		// case []byte:
+		// 	var lob *Lob
+		// 	if lob, err = stmt.conn.newLob(); err != nil {
+		// 		return err
+		// 	}
+
+		// 	if err = lob.createTemp(); err != nil {
+		// 		lob.free()
+		// 		return err
+		// 	}
+
+		// 	if _, err = lob.Write(val); err != nil {
+		// 		trace.Println(err)
+		// 		lob.freeTemp()
+		// 		lob.free()
+		// 		return err
+		// 	}
+
+		// 	stmt.binds[i] = lob
+		// 	err = stmt.bindPyPos(i+1, &bnd, ref(&lob.ptr), sizeOfInt, SQLT_BLOB)
+		// 	if err != nil {
+		// 		fmt.Println(err)
+		// 	}
+		case nil:
+			buf := []byte{0} // null terminated string
+			stmt.binds[i] = buf
+			err = stmt.bindPyPos(i+1, &bnd, bufAddr(buf), len(buf), SQLT_STR)
+		default:
+			return fmt.Errorf("unsupported bind type %T", val)
 		}
 
 		if err != nil {
-			stmt.Close()
+			if err2 := stmt.Close(); err2 != nil {
+				trace.Println(err)
+			}
 			return
 		}
 	}
+
 	return
+}
+
+func (stmt *Statement) bindPyPos(i int, bnd *uintptr, addr uintptr, size int, typ int) error {
+	return stmt.conn.cerr(oci_OCIBindByPos.Call(stmt.ptr, ref(bnd), stmt.conn.err.ptr, uintptr(i), addr, uintptr(size), uintptr(typ), 0, 0, 0, 0, 0, OCI_DEFAULT))
 }
 
 func (stmt *Statement) exec(n int) (err error) {
@@ -101,14 +218,18 @@ func (stmt *Statement) exec(n int) (err error) {
 	}
 
 	if err = stmt.conn.cerr(oci_OCIStmtExecute.Call(stmt.conn.serv.ptr, stmt.ptr, stmt.conn.err.ptr, uintptr(n), 0, 0, 0, uintptr(mode))); err != nil {
-		stmt.Close()
+		if err2 := stmt.Close(); err2 != nil {
+			trace.Println(err)
+		}
 	}
+
 	return
 }
 
 // Query executes query statement
 func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
-	if err := stmt.SetPrefrech(PrefetchRows); err != nil {
+	// fmt.Println("stmt.Query")
+	if err := stmt.SetPrefetch(PrefetchRows); err != nil {
 		return nil, err
 	}
 
@@ -119,79 +240,16 @@ func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
 	if err := stmt.exec(0); err != nil {
 		return nil, err
 	}
-
-	var (
-		columns []string      // collect all columns names we will need them for database/sql
-		descrs  []*Descriptor // collect all description handles we will need them to fetch row
-	)
-
-	// http://web.stanford.edu/dept/itss/docs/oracle/10gR2/appdev.102/b14250/oci04sql.htm#sthref629
-
-	d, err := stmt.newDescriptor(1)
-	for err == nil {
-		columns = append(columns, d.name)
-		pos := len(descrs) + 1
-
-		switch d.typ {
-		case OCI_TYP_ROWID:
-			buf := make([]byte, 18) // rowid at most is 18 bytes long
-			err = d.define(pos, buf, len(buf), SQLT_AFC)
-		case OCI_TYP_VARCHAR, OCI_TYP_CHAR:
-			// oracle doesn't return correct size 
-			// if client side encoding uses more bytes than server side to encode single character
-			buf := make([]byte, d.length * 2 + 2) // make buffer where result is stored + null byte		
-			err = d.define(pos, buf, len(buf), SQLT_STR)
-		case OCI_TYP_LONG:
-			buf := make([]byte, MaxLongSize)
-			err = d.define(pos, buf, len(buf), SQLT_LNG)
-		case OCI_TYP_CLOB:
-			var lob *Lob
-			if lob, err = stmt.conn.newLob(); err == nil {
-				d.valPtr = lob
-				err = d.define(pos, ref(&lob.ptr), -1, SQLT_CLOB)
-			}
-		case OCI_TYP_NUMBER:
-			// TODO: oracle numbers can be bigger than float
-			if sizeOfInt == 4 {
-				tmp := float32(0)
-				err = d.define(pos, &tmp, sizeOfInt, SQLT_FLT)
-			} else {
-				tmp := float64(0)
-				err = d.define(pos, &tmp, sizeOfInt, SQLT_FLT)
-			}
-		case OCI_TYP_DATE:
-			buf := make([]byte, d.length)
-			err = d.define(pos, buf, len(buf), SQLT_DAT)
-		}
-
-		if err != nil {
-			trace.Printf("Define pos: %d, failed with err: %s", pos, err)
-			return nil, err
-		}
-
-		descrs = append(descrs, d)
-		d, err = stmt.newDescriptor(len(descrs) + 1)
-	}
-
-	return &Rows{stmt: stmt, columns: columns, descr: descrs}, nil
-}
-
-func (stmt *Statement) newDescriptor(pos int) (d *Descriptor, err error) {
-	d = newDescriptor(stmt)
-	if err = stmt.conn.cerr(oci_OCIParamGet.Call(stmt.ptr, OCI_HTYPE_STMT, stmt.conn.err.ptr, ref(&d.ptr), uintptr(pos))); err != nil {
-		//trace.Printf("OCIParamGet(..., %d) -> %s", pos, err)
-		return
-	}
-	d.name = d.getName()
-	d.typ = d.getTyp()
-	d.length = d.getLen()
-	return
+	var err error
+	stmt.rows, err = newRows(stmt)
+	return stmt.rows, err
 }
 
 // http://docs.oracle.com/cd/B28359_01/appdev.111/b28395/oci17msc001.htm#i575144
 func (stmt *Statement) prepare(query string) (err error) {
 	buf := append([]byte(query), 0)
-	if err = stmt.conn.cerr(oci_OCIStmtPrepare2.Call(
+
+	return stmt.conn.cerr(oci_OCIStmtPrepare2.Call(
 		stmt.conn.serv.ptr,
 		ref(&stmt.ptr),
 		stmt.conn.err.ptr,
@@ -200,14 +258,12 @@ func (stmt *Statement) prepare(query string) (err error) {
 		0,
 		0,
 		OCI_NTV_SYNTAX,
-		0)); err != nil {
-		//stmt.Close() // free alloc
-	}
-	return
+		0,
+	))
 }
 
-// SetPrefrech sets actual prefetch
-func (stmt *Statement) SetPrefrech(n int) (err error) {
+// SetPrefetch sets actual prefetch
+func (stmt *Statement) SetPrefetch(n int) (err error) {
 	val := int32(n)
 	return stmt.conn.cerr(oci_OCIAttrSet.Call(
 		stmt.ptr,
@@ -215,23 +271,6 @@ func (stmt *Statement) SetPrefrech(n int) (err error) {
 		int32Ref(&val),
 		uintptr(sizeOfInt),
 		uintptr(OCI_ATTR_PREFETCH_ROWS),
-		stmt.conn.err.ptr))
-}
-
-// ColumnConverter converting specific value for sending value to database
-func (stmt *Statement) ColumnConverter(idx int) driver.ValueConverter {
-	return OraValueConverter{idx: idx}
-}
-
-type OraValueConverter struct {
-	// ConvertValue converts a value to a driver Value.
-	stmt *Statement
-	idx  int
-}
-
-// ConvertValue converts type
-func (ovc OraValueConverter) ConvertValue(v interface{}) (driver.Value, error) {
-	//fmt.Printf("convert=%d,t=%T\n", ovc.idx, v)
-
-	return driver.DefaultParameterConverter.ConvertValue(v)
+		stmt.conn.err.ptr,
+	))
 }

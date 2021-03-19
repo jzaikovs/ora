@@ -6,17 +6,17 @@ import (
 
 // Result implements driver.Result interface
 type Result struct {
-	affectedRows int64
+	rowsAffected int64
+	err          error
 }
 
-// LastInsertId returns last inserted id
-// TODO: this is not implemented
+// LastInsertId implements driver.Result interface
 func (result Result) LastInsertId() (int64, error) {
-	return 0, driver.ErrSkip
+	return driver.RowsAffected(0).LastInsertId()
 }
 
-// RowsAffected returns affected row count
-// TODO: this is not implemented
+// RowsAffected returns affected binds count
 func (result Result) RowsAffected() (int64, error) {
-	return 0, driver.ErrSkip
+	return result.rowsAffected, result.err
 }
+
