@@ -1,4 +1,4 @@
-module gitlab.com/jzaikovs/ora
+module github.com/jzaikovs/ora
 
 go 1.11
 

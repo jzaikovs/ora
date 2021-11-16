@@ -97,7 +97,7 @@ func (rows *Rows) scan(dest []driver.Value) error {
 			dest[i] = string(d.valPtr.([]byte))
 		case OCI_TYP_VARCHAR, OCI_TYP_CHAR, OCI_TYP_LONG:
 			if d.ind != 0 {
-				dest[i] = nil
+				dest[i] = "" //  null string in oracle is empty string
 				break
 			}
 			buf := d.valPtr.([]byte)
