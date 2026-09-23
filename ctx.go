@@ -26,8 +26,17 @@ func (conn *Conn) ExecContext(ctx context.Context, query string, args []driver.N
 		return nil, err
 	}
 
-	result, err = stmt.ExecContext(ctx, args)
-	return
+	defer func() {
+		// failed execute already closes statement
+		if stmt.closed {
+			return
+		}
+		if err := stmt.Close(); err != nil {
+			trace.Println(err)
+		}
+	}()
+
+	return stmt.ExecContext(ctx, args)
 }
 
 func (conn *Conn) Ping(ctx context.Context) (err error) {
