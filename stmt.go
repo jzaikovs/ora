@@ -32,11 +32,12 @@ func (conn *Conn) newStatement(query string) (stmt *Statement, err error) {
 		return nil, err
 	}
 
+	conn.lastStmtID++
 	stmt = &Statement{
 		conn:      conn,
 		tx:        conn.tx,
 		ociHandle: h,
-		id:        len(conn.statements) + 1,
+		id:        conn.lastStmtID,
 	}
 
 	conn.statements[stmt.id] = stmt

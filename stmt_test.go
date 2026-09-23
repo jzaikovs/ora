@@ -2,6 +2,7 @@ package ora
 
 import (
 	"database/sql/driver"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -77,5 +78,78 @@ func xTestExecReturnsOutParams2(t *testing.T) {
 
 	if out != 123 {
 		t.Error("out binds not returned value", out)
+	}
+}
+
+func TestRowsErrNilAfterIteration(t *testing.T) {
+	rows, err := db.Query("select 1 from dual")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+	}
+
+	if err := rows.Err(); err != nil {
+		t.Error("rows.Err() after full iteration:", err)
+	}
+}
+
+func TestPreparedStmtQueryAfterRowsClose(t *testing.T) {
+	stmt, err := db.Prepare("select :1 from dual")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	for i := 1; i <= 2; i++ {
+		var x string
+		if err := stmt.QueryRow(i).Scan(&x); err != nil {
+			t.Errorf("query %d: %v", i, err)
+			return
+		}
+		if x != strconv.Itoa(i) {
+			t.Errorf("query %d returned %q", i, x)
+		}
+	}
+
+	if err := stmt.Close(); err != nil {
+		t.Error("stmt.Close():", err)
+	}
+}
+
+func TestStatementIDsUnique(t *testing.T) {
+	conn, err := Open(testDBConnectString)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer conn.Close()
+
+	s1, err := conn.newStatement("select 1 from dual")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	s2, err := conn.newStatement("select 2 from dual")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer s2.Close()
+
+	s1.Close()
+
+	s3, err := conn.newStatement("select 3 from dual")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer s3.Close()
+
+	if s3.id == s2.id || conn.statements[s2.id] != s2 {
+		t.Error("new statement overwrote open statement id", s2.id)
 	}
 }

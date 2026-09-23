@@ -1,7 +1,9 @@
 package ora
 
 import (
+	"database/sql"
 	"database/sql/driver"
+	"io"
 )
 
 // QueryResult handles query result, it adds more functions for result than standard database/sql
@@ -19,11 +21,14 @@ func newQueryResult(rows *Rows, stmt driver.Stmt) *QueryResult {
 	return qr
 }
 
-// Next fetchers next binds in query result
+// Next fetchers next binds in query result, returns sql.ErrNoRows when there are no more rows
 func (qr *QueryResult) Next() error {
 	// trace.Println("qr.Next")
 	qr.lastRow = make([]driver.Value, len(qr.rows.descriptors))
-	return qr.rows.Next(qr.lastRow)
+	if err := qr.rows.Next(qr.lastRow); err != io.EOF {
+		return err
+	}
+	return sql.ErrNoRows
 }
 
 func (qr *QueryResult) Close() (err error) {

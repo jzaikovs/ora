@@ -1,9 +1,9 @@
 package ora
 
 import (
-	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"io"
 )
 
 // Rows implements handling query result from database
@@ -12,6 +12,7 @@ type Rows struct {
 	stmt        *Statement
 	columns     []string
 	descriptors []*Descriptor
+	ownsStmt    bool // statement was created only for this query and is closed with rows
 }
 
 func newRows(stmt *Statement) (*Rows, error) {
@@ -48,7 +49,7 @@ func newRows(stmt *Statement) (*Rows, error) {
 			// Oracle numbers can be bigger than int and float
 			// best thing is to cast to string
 			tmp := make([]byte, 22)
-			d.define(pos, tmp, len(tmp), SQLT_VNU)
+			err = d.define(pos, tmp, len(tmp), SQLT_VNU)
 		case OCI_TYP_DATE:
 			buf := make([]byte, d.length)
 			err = d.define(pos, buf, len(buf), SQLT_DAT)
@@ -78,7 +79,7 @@ func (rows *Rows) Next(dest []driver.Value) (err error) {
 	case OCI_SUCCESS:
 		// skip
 	case OCI_NO_DATA:
-		return sql.ErrNoRows
+		return io.EOF
 	default:
 		if err = rows.conn.cerr(ret, ret2, err); err != nil {
 			trace.Printf("OCIStmtFetch2(...) -> %s", err)
@@ -142,9 +143,12 @@ func (rows *Rows) ColumnTypePrecisionScale(index int) (precision, scale int64, o
 	return
 }
 
-// Close closes nothing to close
+// Close closes statement if rows own it, prepared statements stay open for reuse
 func (rows *Rows) Close() error {
 	// trace.Println("rows.Close")
+	if !rows.ownsStmt {
+		return nil
+	}
 	return rows.stmt.Close()
 }
 
