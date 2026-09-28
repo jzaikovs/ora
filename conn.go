@@ -16,6 +16,7 @@ type Conn struct {
 	tx         *Transaction
 	opened     bool
 	statements map[int]*Statement
+	lastStmtID int
 }
 
 // http://docs.oracle.com/cd/B28359_01/appdev.111/b28395/oci16rel001.htm#LNOCI7016
@@ -96,6 +97,7 @@ func (conn *ConnStd) Query(query string, args []driver.Value) (driver.Rows, erro
 		return nil, err
 	}
 
+	rows.(*Rows).ownsStmt = true
 	return rows, err
 }
 
@@ -117,6 +119,7 @@ func (conn *Conn) Query(query string, binds ...interface{}) (qr *QueryResult, er
 		return nil, err
 	}
 
+	rows.(*Rows).ownsStmt = true
 	return newQueryResult(rows.(*Rows), stmt), err
 }
 

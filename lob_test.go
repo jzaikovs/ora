@@ -1,9 +1,11 @@
 package ora
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"database/sql"
 	"encoding/hex"
+	"io/ioutil"
 	"math/rand"
 	"strings"
 	"testing"
@@ -129,5 +131,41 @@ func TestLargerBlob(t *testing.T) {
 		if strings.ToLower(col1) != h {
 			t.Error("data lost at save")
 		}
+	}
+}
+
+func TestSelectBlob(t *testing.T) {
+	if _, err := db.Exec("DELETE go_test"); err != nil {
+		t.Error(err)
+		return
+	}
+
+	expected := []byte{0, 1, 2, 0xfe, 0xff, 'b', 'l', 'o', 'b'}
+	if _, err := db.Exec("INSERT INTO go_test(data) VALUES(:1)", expected); err != nil {
+		t.Error(err)
+		return
+	}
+
+	err := query("SELECT data FROM go_test", func(row *sql.Rows) (err error) {
+		var lob Lob
+		if err = row.Scan(&lob); err != nil {
+			t.Error(err)
+			return
+		}
+
+		val, err := ioutil.ReadAll(&lob)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		if !bytes.Equal(val, expected) {
+			t.Errorf("blob fetch not working %x, expected %x", val, expected)
+		}
+		return
+	})
+
+	if err != nil {
+		t.Error(err)
 	}
 }
