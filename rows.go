@@ -43,7 +43,11 @@ func newRows(stmt *Statement) (*Rows, error) {
 			var lob *Lob
 			if lob, err = stmt.conn.NewLob(); err == nil {
 				d.valPtr = lob
-				err = d.define(pos, ref(&lob.ptr), -1, SQLT_CLOB)
+				sqlt := SQLT_CLOB
+				if d.typ == OCI_TYP_BLOB {
+					sqlt = SQLT_BLOB
+				}
+				err = d.define(pos, ref(&lob.ptr), -1, sqlt)
 			}
 		case OCI_TYP_NUMBER:
 			// Oracle numbers can be bigger than int and float

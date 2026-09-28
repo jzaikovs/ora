@@ -3,10 +3,8 @@ package ora
 import (
 	"database/sql"
 	"database/sql/driver"
-	"errors"
 	"io/ioutil"
 	"log"
-	"regexp"
 )
 
 // DriverName is name used to register driver
@@ -14,8 +12,7 @@ const DriverName = "ora"
 
 var (
 	// trace = log.New(os.Stdout, "DEBUG:", log.Lshortfile)
-	trace            = log.New(ioutil.Discard, "DEBUG:", log.Lshortfile)
-	patternEZConnect = regexp.MustCompile(`^((.*?)/(.*?))?(@|//)(.*(/.*)?)$`)
+	trace = log.New(ioutil.Discard, "DEBUG:", log.Lshortfile)
 )
 
 func init() {
@@ -41,19 +38,10 @@ func (Driver) Open(connectionString string) (driver.Conn, error) {
 
 // Open creates new connection
 func Open(connectionString string) (*Conn, error) {
-	if len(connectionString) == 0 {
-		return nil, errors.New("empty connect string")
+	username, password, database, err := ParseConnectString(connectionString)
+	if err != nil {
+		return nil, err
 	}
-
-	// for now support only ezconnect connect string
-	matches := patternEZConnect.FindSubmatch([]byte(connectionString))
-	if len(matches) == 0 {
-		return nil, errors.New("unsupported connect string")
-	}
-
-	username := matches[2]
-	password := matches[3]
-	database := matches[5]
 
 	// create connection and logon
 	conn, err := newConnection()
@@ -61,7 +49,7 @@ func Open(connectionString string) (*Conn, error) {
 		return nil, err
 	}
 
-	if err = conn.logon(username, password, database); err != nil {
+	if err = conn.logon([]byte(username), []byte(password), []byte(database)); err != nil {
 		return nil, err
 	}
 
