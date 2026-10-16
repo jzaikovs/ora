@@ -1,5 +1,5 @@
-//go:build ora_legacy_integration
-// +build ora_legacy_integration
+//go:build oracle_write_integration
+// +build oracle_write_integration
 
 package ora
 

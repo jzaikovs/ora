@@ -1,5 +1,5 @@
-//go:build integration
-// +build integration
+//go:build oci_integration
+// +build oci_integration
 
 package ora
 
@@ -39,6 +39,28 @@ func TestOCIHandleFreeFailurePreservesCount(t *testing.T) {
 	handle.free() // A null handle cannot be freed.
 	if got := atomic.LoadInt64(&handleRefCount); got != before {
 		t.Fatalf("failed free changed handle count: before=%d after=%d", before, got)
+	}
+}
+
+func TestOCIBeginFailureReleasesHandles(t *testing.T) {
+	if os.Getenv("ORA_TEST_NATIVE_HANDLES") != "1" {
+		t.Skip("set ORA_TEST_NATIVE_HANDLES=1 with Instant Client installed")
+	}
+	conn, err := newConnection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.free()
+	before := atomic.LoadInt64(&handleRefCount)
+	// No logon: attaching a transaction to the null service context must fail cleanly.
+	if _, err := conn.BeginTx(context.Background(), driver.TxOptions{ReadOnly: true}); err == nil {
+		t.Fatal("begin succeeded without a service context")
+	}
+	if conn.tx != nil || conn.trans != nil {
+		t.Fatal("failed begin retained transaction state")
+	}
+	if got := atomic.LoadInt64(&handleRefCount); got != before {
+		t.Fatalf("failed begin leaked handles: before=%d after=%d", before, got)
 	}
 }
 

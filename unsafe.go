@@ -16,10 +16,6 @@ func uint16Ref(p *uint16) uintptr {
 	return uintptr(unsafe.Pointer(p))
 }
 
-func uint32Ref(p *uint32) uintptr {
-	return uintptr(unsafe.Pointer(p))
-}
-
 func intRef(p *int) uintptr {
 	return uintptr(unsafe.Pointer(p))
 }
@@ -53,10 +49,6 @@ func bufAddr(p []byte) uintptr {
 		return 0
 	}
 	return uintptr(unsafe.Pointer(&p[0]))
-}
-
-func bufRef(p *[]byte) uintptr {
-	return uintptr(unsafe.Pointer(p))
 }
 
 func ref(p *uintptr) uintptr {

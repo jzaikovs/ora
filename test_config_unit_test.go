@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestLegacyTestConfig(t *testing.T) {
+func TestOracleTestConfig(t *testing.T) {
 	for _, key := range []string{"ORA_TEST_USER", "ORA_TEST_PASSWORD", "ORA_TEST_HOST"} {
 		t.Setenv(key, "")
 		if err := os.Unsetenv(key); err != nil {
@@ -19,25 +19,25 @@ func TestLegacyTestConfig(t *testing.T) {
 	if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
 		t.Fatal(err)
 	}
-	want := legacyTestConfig{
+	want := oracleTestConfig{
 		user:     "TEST_USER",
 		password: "p@ss/#:$word",
 		host:     "//test-host:1521/TEST",
 	}
-	got, err := loadLegacyTestConfig(path)
+	got, err := loadOracleTestConfig(path)
 	if err != nil || got != want {
 		t.Fatalf("file configuration did not preserve values: err=%v", err)
 	}
 
 	t.Setenv("ORA_TEST_HOST", "//override:1521/OTHER")
-	got, err = loadLegacyTestConfig(path)
+	got, err = loadOracleTestConfig(path)
 	want.host = "//override:1521/OTHER"
 	if err != nil || got != want {
 		t.Fatalf("environment did not override only the specified field: err=%v", err)
 	}
 
 	t.Setenv("ORA_TEST_PASSWORD", "")
-	if _, err := loadLegacyTestConfig(path); err == nil || !strings.Contains(err.Error(), "ORA_TEST_PASSWORD") {
+	if _, err := loadOracleTestConfig(path); err == nil || !strings.Contains(err.Error(), "ORA_TEST_PASSWORD") {
 		t.Fatalf("explicit empty environment value must not fall back to file: %v", err)
 	}
 
@@ -46,8 +46,8 @@ func TestLegacyTestConfig(t *testing.T) {
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	got, err = loadLegacyTestConfig(path)
-	want = legacyTestConfig{
+	got, err = loadOracleTestConfig(path)
+	want = oracleTestConfig{
 		user:     "ENV_USER",
 		password: "environment-secret",
 		host:     "//override:1521/OTHER",
@@ -59,7 +59,7 @@ func TestLegacyTestConfig(t *testing.T) {
 	for _, key := range []string{"ORA_TEST_USER", "ORA_TEST_PASSWORD", "ORA_TEST_HOST"} {
 		t.Setenv(key, "")
 	}
-	_, err = loadLegacyTestConfig(path)
+	_, err = loadOracleTestConfig(path)
 	if err == nil {
 		t.Fatal("missing configuration accepted")
 	}
@@ -70,12 +70,12 @@ func TestLegacyTestConfig(t *testing.T) {
 	}
 }
 
-func TestLegacyTestConfigMalformedFileDoesNotExposeSecrets(t *testing.T) {
+func TestOracleTestConfigMalformedFileDoesNotExposeSecrets(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".env")
 	if err := os.WriteFile(path, []byte("ORA_TEST_PASSWORD='private-secret\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	_, err := loadLegacyTestConfig(path)
+	_, err := loadOracleTestConfig(path)
 	if err == nil || strings.Contains(err.Error(), "private-secret") {
 		t.Fatal("malformed file must fail without exposing credentials")
 	}

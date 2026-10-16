@@ -8,18 +8,18 @@ import (
 	"github.com/joho/godotenv"
 )
 
-type legacyTestConfig struct {
+type oracleTestConfig struct {
 	user     string
 	password string
 	host     string
 }
 
-// Only the legacy TestMain calls this; normal driver use never reads .env.
-func loadLegacyTestConfig(path string) (legacyTestConfig, error) {
+// Only the Oracle integration TestMain calls this; normal driver use never reads .env.
+func loadOracleTestConfig(path string) (oracleTestConfig, error) {
 	values, err := godotenv.Read(path)
 	if err != nil && !os.IsNotExist(err) {
 		// Parser errors may contain source text, including credentials.
-		return legacyTestConfig{}, fmt.Errorf("ora: cannot read or parse test environment file %q", path)
+		return oracleTestConfig{}, fmt.Errorf("ora: cannot read or parse test environment file %q", path)
 	}
 	value := func(key string) string {
 		if v, ok := os.LookupEnv(key); ok {
@@ -27,7 +27,7 @@ func loadLegacyTestConfig(path string) (legacyTestConfig, error) {
 		}
 		return values[key]
 	}
-	config := legacyTestConfig{
+	config := oracleTestConfig{
 		user:     value("ORA_TEST_USER"),
 		password: value("ORA_TEST_PASSWORD"),
 		host:     value("ORA_TEST_HOST"),
@@ -43,7 +43,7 @@ func loadLegacyTestConfig(path string) (legacyTestConfig, error) {
 		}
 	}
 	if len(missing) != 0 {
-		return legacyTestConfig{}, fmt.Errorf(
+		return oracleTestConfig{}, fmt.Errorf(
 			"ora: required test configuration missing: %s; "+
 				"set environment variables or fill in .env using .env.example",
 			strings.Join(missing, ", "),

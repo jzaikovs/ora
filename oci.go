@@ -5,6 +5,7 @@ const (
 	OCI_THREADED       = 1
 	OCI_TRANS_NEW      = 0x00000001
 	OCI_TRANS_READONLY = 0x00000100
+	OCI_AL32UTF8       = 873
 )
 
 // http://docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci02bas.htm#g466063
@@ -13,6 +14,7 @@ const (
 	OCI_HTYPE_ERROR  = 2
 	OCI_HTYPE_SVCCTX = 3
 	OCI_HTYPE_STMT   = 4
+	OCI_HTYPE_TRANS  = 10
 )
 
 const (
@@ -47,6 +49,7 @@ const (
 	OCI_ATTR_NAME          = 4
 	OCI_ATTR_PRECISION     = 5
 	OCI_ATTR_SCALE         = 6
+	OCI_ATTR_TRANS         = 8
 	OCI_ATTR_ROW_COUNT     = 9
 	OCI_ATTR_PARAM_COUNT   = 18
 	OCI_ATTR_PREFETCH_ROWS = 11
@@ -146,7 +149,7 @@ var (
 	oci_OCIDefineByPos        = ociLibrary.NewProc("OCIDefineByPos")
 	oci_OCIDescriptorAlloc    = ociLibrary.NewProc("OCIDescriptorAlloc")
 	oci_OCIDescriptorFree     = ociLibrary.NewProc("OCIDescriptorFree")
-	oci_OCIEnvCreate          = ociLibrary.NewProc("OCIEnvCreate")
+	oci_OCIEnvNlsCreate       = ociLibrary.NewProc("OCIEnvNlsCreate")
 	oci_OCIErrorGet           = ociLibrary.NewProc("OCIErrorGet")
 	oci_OCIHandleAlloc        = ociLibrary.NewProc("OCIHandleAlloc")
 	oci_OCIHandleFree         = ociLibrary.NewProc("OCIHandleFree")
@@ -154,7 +157,7 @@ var (
 	oci_OCILobCreateTemporary = ociLibrary.NewProc("OCILobCreateTemporary")
 	oci_OCILobFreeTemporary   = ociLibrary.NewProc("OCILobFreeTemporary")
 	oci_OCILobOpen            = ociLibrary.NewProc("OCILobOpen")
-	oci_OCILobRead            = ociLibrary.NewProc("OCILobRead")
+	oci_OCILobRead2           = ociLibrary.NewProc("OCILobRead2")
 	oci_OCILobWriteAppend     = ociLibrary.NewProc("OCILobWriteAppend")
 	oci_OCILogoff             = ociLibrary.NewProc("OCILogoff")
 	oci_OCILogon              = ociLibrary.NewProc("OCILogon")

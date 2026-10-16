@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"unsafe"
 )
 
 // Rows implements handling query result from database
@@ -27,7 +28,14 @@ func newRows(stmt *Statement) (*Rows, error) {
 	// http://web.stanford.edu/dept/itss/docs/oracle/10gR2/appdev.102/b14250/oci04sql.htm#sthref629
 
 	var count uint32
-	if err := stmt.conn.cerr(oci_OCIAttrGet.Call(stmt.ptr, OCI_HTYPE_STMT, uint32Ref(&count), 0, OCI_ATTR_PARAM_COUNT, stmt.conn.err.ptr)); err != nil {
+	if err := stmt.conn.cerr(oci_OCIAttrGet.Call(
+		stmt.ptr,
+		OCI_HTYPE_STMT,
+		uintptr(unsafe.Pointer(&count)),
+		0,
+		OCI_ATTR_PARAM_COUNT,
+		stmt.conn.err.ptr,
+	)); err != nil {
 		return nil, err
 	}
 	for pos := 1; pos <= int(count); pos++ {
@@ -52,6 +60,7 @@ func newRows(stmt *Statement) (*Rows, error) {
 		case OCI_TYP_CLOB, OCI_TYP_BLOB:
 			var lob *Lob
 			if lob, err = stmt.conn.NewLob(); err == nil {
+				lob.character = d.typ == OCI_TYP_CLOB
 				d.valPtr = lob
 				sqlt := SQLT_CLOB
 				if d.typ == OCI_TYP_BLOB {

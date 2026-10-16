@@ -15,6 +15,7 @@ type Conn struct {
 	serv       *ociHandle
 	err        *ociHandle
 	breakErr   *ociHandle
+	trans      *ociHandle
 	bad        bool
 	tx         *Transaction
 	opened     bool
@@ -28,7 +29,14 @@ func newConnection() (*Conn, error) {
 	conn.env = &ociHandle{typ: OCI_HTYPE_ENV}
 	conn.statements = make(map[int]*Statement)
 
-	err := conn.envErr(oci_OCIEnvCreate.Call(conn.env.ref(), OCI_THREADED, 0, 0, 0, 0, 0, 0))
+	// Go strings use UTF-8 regardless of the client's NLS_LANG or database charset.
+	err := conn.envErr(oci_OCIEnvNlsCreate.Call(
+		conn.env.ref(),
+		OCI_THREADED,
+		0, 0, 0, 0, 0, 0,
+		OCI_AL32UTF8,
+		OCI_AL32UTF8,
+	))
 	if err != nil {
 		return nil, err
 	}
@@ -58,6 +66,26 @@ func (conn *Conn) Begin() (driver.Tx, error) {
 func (conn *Conn) begin(mode int) (driver.Tx, error) {
 	if conn.tx != nil {
 		return nil, errors.New("ora: transaction already active")
+	}
+	if conn.trans == nil {
+		trans, err := conn.alloc(OCI_HTYPE_TRANS)
+		if err != nil {
+			return nil, err
+		}
+		// OCITransStart requires a transaction handle on the service context.
+		if err := conn.cerr(oci_OCIAttrSet.Call(
+			conn.serv.ptr,
+			OCI_HTYPE_SVCCTX,
+			trans.ptr,
+			0,
+			OCI_ATTR_TRANS,
+			conn.err.ptr,
+		)); err != nil {
+			trans.free()
+			return nil, err
+		}
+		// Reuse the handle across transactions and release it with the connection.
+		conn.trans = trans
 	}
 	err := conn.cerr(oci_OCITransStart.Call(conn.serv.ptr, conn.err.ptr, 600, uintptr(mode)))
 	if err != nil {
@@ -160,6 +188,10 @@ func (conn *Conn) free() {
 	}
 
 	conn.statements = make(map[int]*Statement)
+	if conn.trans != nil {
+		conn.trans.free()
+		conn.trans = nil
+	}
 	conn.err.free()
 	conn.breakErr.free()
 	conn.env.free()

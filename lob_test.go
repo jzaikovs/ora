@@ -1,5 +1,5 @@
-//go:build ora_legacy_integration
-// +build ora_legacy_integration
+//go:build oracle_write_integration
+// +build oracle_write_integration
 
 package ora
 
@@ -8,6 +8,7 @@ import (
 	"crypto/sha1"
 	"database/sql"
 	"encoding/hex"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"strings"
@@ -33,7 +34,9 @@ func TestLobHandleNulls(t *testing.T) {
 		}
 	}
 
-	db.Exec("commit")
+	if _, err := db.Exec("commit"); err != nil {
+		t.Fatal(err)
+	}
 
 	err := query("SELECT id, name, lobcol FROM go_test", func(row *sql.Rows) (err error) {
 		var (
@@ -68,12 +71,10 @@ func TestLobHandleNulls(t *testing.T) {
 }
 
 func TestLobRead(t *testing.T) {
-	val := ""
-	for i := 0; i < 3200; i++ {
-		val = val + "0123456789"
+	val := strings.Repeat("0123456789", 3200)
+	if _, err := db.Exec("delete go_test"); err != nil {
+		t.Fatal(err)
 	}
-
-	db.Exec("delete go_test")
 	if _, err := db.Exec(`declare c clob; begin c := :1; c := c || :1;
 							 insert into go_test (id, lobcol) values(600, c);
 							 insert into go_test (id, lobcol) values(600, c); end;`, val); err != nil {
@@ -81,15 +82,27 @@ func TestLobRead(t *testing.T) {
 		return
 	}
 
-	var lob Lob
-
-	query("select lobcol from go_test where id = 600", func(rows *sql.Rows) error {
-		return rows.Scan(&lob)
+	count := 0
+	err := query("select lobcol from go_test where id = 600", func(rows *sql.Rows) error {
+		var lob Lob
+		if err := rows.Scan(&lob); err != nil {
+			return err
+		}
+		s, err := lob.String()
+		if err != nil {
+			return err
+		}
+		if s != val+val {
+			return fmt.Errorf("CLOB returned %d bytes, expected %d with identical contents", len(s), len(val+val))
+		}
+		count++
+		return nil
 	})
-
-	s, _ := lob.String()
-	if val+val != s {
-		t.Errorf("lob.Read not returned expected")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("read %d CLOB rows, want 2", count)
 	}
 }
 
@@ -118,7 +131,7 @@ func TestLargerBlob(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	defer row.Close()
+	defer func() { _ = row.Close() }()
 
 	for _, h := range hashes {
 		if !row.Next() {

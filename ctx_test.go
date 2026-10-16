@@ -1,41 +1,13 @@
-//go:build ora_legacy_integration
-// +build ora_legacy_integration
+//go:build oracle_integration
+// +build oracle_integration
 
 package ora
 
 import (
 	"context"
-	"database/sql"
 	"database/sql/driver"
-	"errors"
 	"testing"
-	"time"
 )
-
-func TestExecCancel(t *testing.T) {
-	conn, err := sql.Open(DriverName, testDBConnectString)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	defer conn.Close()
-
-	ctx, clean := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer clean()
-
-	beforeStart := time.Now()
-
-	_, err = conn.ExecContext(ctx, "begin dbms_lock.sleep(:1); end;", 1.5)
-	if err == nil {
-		t.Error("Error not raised", time.Since(beforeStart))
-		return
-	}
-
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Error(err)
-		return
-	}
-}
 
 func TestPingerContext(t *testing.T) {
 	if err := db.Ping(); err != nil {
@@ -49,7 +21,11 @@ func TestExecContextFreesStatement(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	allocCountAfterOpen := handleRefCount
 

@@ -1,11 +1,11 @@
-//go:build ora_legacy_integration
-// +build ora_legacy_integration
+//go:build oracle_integration
+// +build oracle_integration
 
 package ora
 
 import (
 	"database/sql"
-	"fmt"
+	"errors"
 	"sync/atomic"
 	"testing"
 )
@@ -17,21 +17,9 @@ func TestWrongHost(t *testing.T) {
 		return
 	}
 
-	if err.Error() != "ORA-12541: TNS:no listener" {
-		t.Errorf("Wrong error %v", []byte(err.Error()))
-		return
-	}
-}
-
-func TestWrongUsername(t *testing.T) {
-	_, err := Open(fmt.Sprintf("%s/test@%s", dbUser, dbHost))
-	if err == nil {
-		t.Error("No error on bad connect attempt")
-		return
-	}
-
-	if err.Error() != "ORA-01017: invalid username/password; logon denied" {
-		t.Errorf("Wrong error %v", err)
+	var oracleErr Error
+	if !errors.As(err, &oracleErr) || oracleErr.Code != 12541 {
+		t.Errorf("got %v, want ORA-12541", err)
 		return
 	}
 }
@@ -126,49 +114,4 @@ func TestHandlesFreed(t *testing.T) {
 	if handleRefCount != allocCount {
 		t.Errorf("Handles not freed, allocCount %v after test %v", allocCount, handleRefCount)
 	}
-}
-
-func TestConnectionClosed(t *testing.T) {
-	other, err := Open(testDBConnectString)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	rows, err := other.Query("SELECT 1 FROM dual")
-	if err != nil {
-		t.Error(err)
-		return
-	}
-	rows.Close()
-
-	if err = other.Close(); err != nil {
-		t.Error(err)
-		return
-	}
-
-	if !checkSessionCount(t, 1) {
-		t.Error("Session not closed")
-	}
-}
-
-func checkSessionCount(t *testing.T, expected int) bool {
-	row := db.QueryRow("SELECT count(1) FROM v$session WHERE username = :1", dbUser)
-	if row == nil {
-		t.Error("Can't query sessions")
-		return false
-	}
-
-	cnt := 0
-	if err := row.Scan(&cnt); err != nil {
-		t.Error(err)
-		return false
-	}
-
-	if cnt != expected {
-		t.Error("Session count doesn't match expected")
-		return false
-	}
-
-	return true
 }

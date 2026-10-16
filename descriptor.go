@@ -2,6 +2,7 @@ package ora
 
 import (
 	"reflect"
+	"unsafe"
 )
 
 // Descriptor describes variable where to put query result
@@ -59,18 +60,35 @@ func newDescriptor(stmt *Statement, pos int) (d *Descriptor, err error) {
 }
 
 func (descriptor *Descriptor) getIntAttr(attr int) (t int, err error) {
-	err = descriptor.stmt.conn.cerr(oci_OCIAttrGet.Call(descriptor.ptr, OCI_DTYPE_PARAM, intRef(&t), 0, uintptr(attr), descriptor.stmt.conn.err.ptr))
+	err = descriptor.stmt.conn.cerr(oci_OCIAttrGet.Call(
+		descriptor.ptr,
+		OCI_DTYPE_PARAM,
+		uintptr(unsafe.Pointer(&t)),
+		0,
+		uintptr(attr),
+		descriptor.stmt.conn.err.ptr,
+	))
 	return
 }
 
 func (descriptor *Descriptor) getName() (name string, err error) {
-	buf := make([]byte, 512) // TODO: what is max length of result column name?
-	bufLen := 0
-
-	if err = descriptor.stmt.conn.cerr(oci_OCIAttrGet.Call(descriptor.ptr, OCI_DTYPE_PARAM, bufRef(&buf), intRef(&bufLen), OCI_ATTR_NAME, descriptor.stmt.conn.err.ptr)); err != nil {
+	// OCI returns a borrowed pointer and a ub4 length, not a Go slice.
+	// Convert output pointers in the call so Go keeps them stable during OCI.
+	var namePtr *[1 << 30]byte
+	var nameLen uint32
+	if err = descriptor.stmt.conn.cerr(oci_OCIAttrGet.Call(
+		descriptor.ptr,
+		OCI_DTYPE_PARAM,
+		uintptr(unsafe.Pointer(&namePtr)),
+		uintptr(unsafe.Pointer(&nameLen)),
+		OCI_ATTR_NAME,
+		descriptor.stmt.conn.err.ptr,
+	)); err != nil {
 		return
 	}
-	name = string(buf[:bufLen])
+	if nameLen != 0 {
+		name = string(namePtr[:nameLen:nameLen])
+	}
 	return
 }
 

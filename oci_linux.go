@@ -35,6 +35,8 @@ type LibraryProc struct {
 }
 
 // Call calls function from library
+//
+//go:uintptrescapes
 func (lib LibraryProc) Call(args ...uintptr) (r1 uintptr, r2 uintptr, err error) {
 	err = lib.err
 	r1 = lib.fn(args...)

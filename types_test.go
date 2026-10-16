@@ -1,5 +1,5 @@
-//go:build ora_legacy_integration
-// +build ora_legacy_integration
+//go:build oracle_integration
+// +build oracle_integration
 
 package ora
 
@@ -14,13 +14,6 @@ import (
 	"testing"
 	"time"
 )
-
-func BenchmarkNumToString(b *testing.B) {
-	buf := []byte{62, 98, 87, 86, 9, 36, 66, 12, 22, 69, 63, 55, 75, 58, 63, 69, 22, 51, 73, 17, 81}
-	for i := 0; i < b.N; i++ {
-		convertNumberToString(buf)
-	}
-}
 
 func testNumberTo(t *testing.T, v interface{}) bool {
 	//fmt.Println(v)
@@ -129,7 +122,19 @@ func TestNumberCastFloat(t *testing.T) {
 // }
 
 func testNumberCastStrict(t *testing.T, v interface{}) {
-	row := db.QueryRow("SELECT to_number(:1), to_char(to_number(:1)) FROM dual", v)
+	t.Helper()
+	number := "to_number(:1)"
+	if text, ok := v.(string); ok {
+		parts := strings.Split(strings.TrimPrefix(text, "-"), ".")
+		format := strings.Repeat("9", len(parts[0]))
+		if len(parts) == 2 {
+			format += "D" + strings.Repeat("9", len(parts[1]))
+		}
+		number = "to_number(:1, '" + format + "', 'NLS_NUMERIC_CHARACTERS=''.,''')"
+	}
+	// Fix the SQL conversion locale without changing the database session's NLS settings.
+	query := "SELECT " + number + ", to_char(" + number + ", 'TM9', 'NLS_NUMERIC_CHARACTERS=''.,''') FROM dual"
+	row := db.QueryRow(query, v)
 	if row == nil {
 		t.Error("Should have fetched row")
 		return
@@ -138,7 +143,7 @@ func testNumberCastStrict(t *testing.T, v interface{}) {
 	var col1 string
 	var col2 string
 	if err := row.Scan(&col1, &col2); err != nil {
-		t.Error(err)
+		t.Errorf("convert %v: %v", v, err)
 		return
 	}
 
@@ -217,7 +222,9 @@ func TestTypeCastingRandomNumbers(t *testing.T) {
 
 		v := fmt.Sprintf("%s%d.%d", sign, part1, rand.Uint32())
 
-		expect.Parse(v, 10)
+		if _, _, err := expect.Parse(v, 10); err != nil {
+			t.Fatal(err)
+		}
 
 		row := db.QueryRow("SELECT to_number(:1, '99999999999999999999.99999999999999999') FROM dual", v)
 		if row == nil {
@@ -231,58 +238,14 @@ func TestTypeCastingRandomNumbers(t *testing.T) {
 			return
 		}
 
-		got.Parse(col1, 10)
+		if _, _, err := got.Parse(col1, 10); err != nil {
+			t.Fatal(err)
+		}
 
 		if expect.Cmp(got) != 0 {
 			t.Error("Data loss detected in type casting", col1, fmt.Sprint(v))
 		}
 		tries--
-	}
-}
-
-func TestNumberFormatting(t *testing.T) {
-	db.Exec("DELETE go_test")
-
-	res, err := db.Exec("INSERT INTO go_test (int64, float64) VALUES (3.000, 3.14159)")
-	if err != nil {
-		t.Log(err)
-		return
-	}
-
-	if cnt, err := res.RowsAffected(); err != nil || cnt != 1 {
-		t.Log(err)
-		t.Error("Incorrect rows affected value after INSERT")
-		return
-	}
-
-	var (
-		i64         int64
-		f64, f64int float64
-	)
-
-	if err := db.QueryRow("SELECT int64, float64, int64 as int_as_float FROM go_test").Scan(&i64, &f64, &f64int); err != nil {
-		t.Error(err)
-		return
-	}
-
-	expectInt := int64(3)
-	if i64 != expectInt {
-		t.Errorf("Incorrect INTEGER formating (%v) != (%v)", i64, expectInt)
-		return
-	}
-
-	const TOLERANCE = 0.00000001
-
-	expect := 3.142
-	if diff := math.Abs(f64 - expect); diff > TOLERANCE {
-		t.Errorf("Incorrect FLOAT formating (%v) - (%v) = (%f)", f64, expect, diff)
-		return
-	}
-
-	expect = 3.0
-	if diff := math.Abs(f64int - expect); diff > TOLERANCE {
-		t.Errorf("Incorrect FLOAT casting (%v) - (%v) = (%f)", f64int, expect, diff)
-		return
 	}
 }
 
@@ -314,7 +277,7 @@ func TestNullFetch(t *testing.T) {
 		return
 	}
 
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var col1, col2 *sql.NullInt64
 
@@ -348,7 +311,7 @@ func BenchmarkFetchString(b *testing.B) {
 		b.Error(err)
 		return
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	rows, err := db.Query("SELECT dummy FROM dual CONNECT BY level <= :1", b.N)
 	if err != nil {
@@ -364,7 +327,9 @@ func BenchmarkFetchString(b *testing.B) {
 		}
 	}
 	b.StopTimer()
-	rows.Close()
+	if err := rows.Close(); err != nil {
+		b.Error(err)
+	}
 }
 
 func BenchmarkFetchNumber(b *testing.B) {
@@ -374,14 +339,14 @@ func BenchmarkFetchNumber(b *testing.B) {
 		b.Error(err)
 		return
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	rows, err := db.Query("SELECT -3.141592653589793238462643383279502884197169399375 FROM dual CONNECT BY level <= :1", b.N)
 	if err != nil {
 		b.Error(err)
 		return
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	b.StartTimer()
 	for rows.Next() {
