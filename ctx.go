@@ -35,7 +35,11 @@ func (stmt *Statement) ExecContext(ctx context.Context, args []driver.NamedValue
 	return result, err
 }
 
-func (conn *Conn) ExecContext(ctx context.Context, query string, args []driver.NamedValue) (result driver.Result, err error) {
+func (conn *Conn) ExecContext(
+	ctx context.Context,
+	query string,
+	args []driver.NamedValue,
+) (result driver.Result, err error) {
 	values, err := positionalValues(args)
 	if err != nil {
 		return nil, err

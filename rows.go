@@ -103,7 +103,6 @@ func (rows *Rows) Next(dest []driver.Value) (err error) {
 }
 
 func (rows *Rows) next(dest []driver.Value) (err error) {
-	// trace.Println("rows.Next")
 	// 1. fetch result in result binds,
 	// TODO: manipulate fetch_size - prefetch
 	ret, ret2, err := oci_OCIStmtFetch2.Call(rows.stmt.ptr, rows.conn.err.ptr, 1, OCI_DEFAULT, 0, OCI_DEFAULT)
@@ -174,7 +173,6 @@ func (rows *Rows) Close() error {
 		return nil
 	}
 	rows.closed = true
-	// trace.Println("rows.Close")
 	if !rows.ownsStmt || rows.stmt.closed {
 		return nil
 	}

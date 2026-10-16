@@ -27,8 +27,13 @@ func newDescriptor(stmt *Statement, pos int) (d *Descriptor, err error) {
 		stmt:      stmt,
 	}
 
-	if err = stmt.conn.cerr(oci_OCIParamGet.Call(stmt.ptr, OCI_HTYPE_STMT, stmt.conn.err.ptr, ref(&d.ptr), uintptr(pos))); err != nil {
-		//trace.Printf("OCIParamGet(..., %d) -> %s", pos, err)
+	if err = stmt.conn.cerr(oci_OCIParamGet.Call(
+		stmt.ptr,
+		OCI_HTYPE_STMT,
+		stmt.conn.err.ptr,
+		ref(&d.ptr),
+		uintptr(pos),
+	)); err != nil {
 		return
 	}
 
@@ -93,11 +98,24 @@ func (descriptor *Descriptor) getName() (name string, err error) {
 }
 
 func (descriptor *Descriptor) define(pos int, addr interface{}, size int, typ int) error {
-	if ptr, ok := addr.(uintptr); ok {
-		return descriptor.stmt.conn.cerr(oci_OCIDefineByPos.Call(descriptor.stmt.ptr, descriptor.ref(), descriptor.stmt.conn.err.ptr, uintptr(pos), ptr, uintptr(size), uintptr(typ), int16Ref(&descriptor.ind), uint16Ref(&descriptor.rlen), 0, 0))
+	// A uintptr address is used directly; any other value is retained in valPtr
+	// so the buffer stays alive while OCI holds the pointer.
+	ptr, ok := addr.(uintptr)
+	if !ok {
+		descriptor.valPtr = addr
+		ptr = reflect.ValueOf(descriptor.valPtr).Pointer()
 	}
-
-	descriptor.valPtr = addr
-	ptr := reflect.ValueOf(descriptor.valPtr).Pointer()
-	return descriptor.stmt.conn.cerr(oci_OCIDefineByPos.Call(descriptor.stmt.ptr, descriptor.ref(), descriptor.stmt.conn.err.ptr, uintptr(pos), ptr, uintptr(size), uintptr(typ), int16Ref(&descriptor.ind), uint16Ref(&descriptor.rlen), 0, 0))
+	return descriptor.stmt.conn.cerr(oci_OCIDefineByPos.Call(
+		descriptor.stmt.ptr,
+		descriptor.ref(),
+		descriptor.stmt.conn.err.ptr,
+		uintptr(pos),
+		ptr,
+		uintptr(size),
+		uintptr(typ),
+		int16Ref(&descriptor.ind),
+		uint16Ref(&descriptor.rlen),
+		0,
+		0,
+	))
 }

@@ -2,7 +2,7 @@ package ora
 
 import (
 	"bytes"
-	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -49,10 +49,11 @@ func convertNumberToString(num []byte) string {
 	if exp == 0 {
 		for i, n := range num {
 			if i == 0 {
-				fmt.Fprintf(buf, "%v.", n)
+				buf.WriteString(strconv.Itoa(int(n)))
+				buf.WriteByte('.')
 				decimal = true
 			} else {
-				fmt.Fprintf(buf, "%02v", n)
+				writeDigit(buf, n)
 			}
 		}
 	} else if exp < 0 {
@@ -65,14 +66,14 @@ func convertNumberToString(num []byte) string {
 		}
 
 		for _, n := range num {
-			fmt.Fprintf(buf, "%02v", n)
+			writeDigit(buf, n)
 		}
 	} else if exp > 0 {
 		for i, n := range num {
 			if i == 0 {
-				fmt.Fprintf(buf, "%v", n)
+				buf.WriteString(strconv.Itoa(int(n)))
 			} else {
-				fmt.Fprintf(buf, "%02v", n)
+				writeDigit(buf, n)
 			}
 			if exp == 0 {
 				buf.WriteByte('.')
@@ -82,7 +83,7 @@ func convertNumberToString(num []byte) string {
 		}
 
 		for exp >= 0 {
-			fmt.Fprint(buf, "00")
+			buf.WriteString("00")
 			exp--
 		}
 	}
@@ -92,6 +93,15 @@ func convertNumberToString(num []byte) string {
 	}
 
 	return buf.String()
+}
+
+// writeDigit appends a base-100 digit padded to at least two characters, like
+// fmt's %02v without the reflection cost.
+func writeDigit(buf *bytes.Buffer, n byte) {
+	if n < 10 {
+		buf.WriteByte('0')
+	}
+	buf.WriteString(strconv.Itoa(int(n)))
 }
 
 func timeToOraBytes(val time.Time) []byte {

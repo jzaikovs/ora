@@ -81,18 +81,9 @@ func (stmt *Statement) NumInput() int {
 
 // Exec executes statement with passed binds
 func (stmt *Statement) Exec(args []driver.Value) (driver.Result, error) {
-	// fmt.Println("stmt.Exec")
 	if err := stmt.bind(args); err != nil {
 		return nil, err
 	}
-
-	// for _, b := range stmt.binds {
-	// 	switch v := b.(type) {
-	// 	case *Lob:
-	// 		defer v.free()
-	// 		defer v.freeTemp()
-	// 	}
-	// }
 
 	if err := stmt.exec(1); err != nil {
 		return nil, err
@@ -113,7 +104,14 @@ func (stmt *Statement) Exec(args []driver.Value) (driver.Result, error) {
 }
 
 func (stmt *Statement) result() (r Result) {
-	r.err = stmt.conn.cerr(oci_OCIAttrGet.Call(stmt.ptr, OCI_HTYPE_STMT, int64Ref(&r.rowsAffected), 0, OCI_ATTR_ROW_COUNT, stmt.conn.err.ptr))
+	r.err = stmt.conn.cerr(oci_OCIAttrGet.Call(
+		stmt.ptr,
+		OCI_HTYPE_STMT,
+		int64Ref(&r.rowsAffected),
+		0,
+		OCI_ATTR_ROW_COUNT,
+		stmt.conn.err.ptr,
+	))
 	return
 }
 
@@ -165,29 +163,6 @@ func (stmt *Statement) bind(args []driver.Value) (err error) {
 			buf := val
 			stmt.binds[i] = buf
 			err = stmt.bindPyPos(i+1, &bnd, bufAddr(buf), len(buf), SQLT_BIN)
-		// case []byte:
-		// 	var lob *Lob
-		// 	if lob, err = stmt.conn.newLob(); err != nil {
-		// 		return err
-		// 	}
-
-		// 	if err = lob.createTemp(); err != nil {
-		// 		lob.free()
-		// 		return err
-		// 	}
-
-		// 	if _, err = lob.Write(val); err != nil {
-		// 		trace.Println(err)
-		// 		lob.freeTemp()
-		// 		lob.free()
-		// 		return err
-		// 	}
-
-		// 	stmt.binds[i] = lob
-		// 	err = stmt.bindPyPos(i+1, &bnd, ref(&lob.ptr), sizeOfInt, SQLT_BLOB)
-		// 	if err != nil {
-		// 		fmt.Println(err)
-		// 	}
 		case nil:
 			buf := []byte{0} // null terminated string
 			stmt.binds[i] = buf
@@ -206,7 +181,17 @@ func (stmt *Statement) bind(args []driver.Value) (err error) {
 }
 
 func (stmt *Statement) bindPyPos(i int, bnd *uintptr, addr uintptr, size int, typ int) error {
-	return stmt.conn.cerr(oci_OCIBindByPos.Call(stmt.ptr, ref(bnd), stmt.conn.err.ptr, uintptr(i), addr, uintptr(size), uintptr(typ), 0, 0, 0, 0, 0, OCI_DEFAULT))
+	return stmt.conn.cerr(oci_OCIBindByPos.Call(
+		stmt.ptr,
+		ref(bnd),
+		stmt.conn.err.ptr,
+		uintptr(i),
+		addr,
+		uintptr(size),
+		uintptr(typ),
+		0, 0, 0, 0, 0,
+		OCI_DEFAULT,
+	))
 }
 
 func (stmt *Statement) exec(n int) (err error) {
@@ -217,7 +202,14 @@ func (stmt *Statement) exec(n int) (err error) {
 	}
 
 	// A failed execute leaves the statement usable; owners close it.
-	return stmt.conn.cerr(oci_OCIStmtExecute.Call(stmt.conn.serv.ptr, stmt.ptr, stmt.conn.err.ptr, uintptr(n), 0, 0, 0, uintptr(mode)))
+	return stmt.conn.cerr(oci_OCIStmtExecute.Call(
+		stmt.conn.serv.ptr,
+		stmt.ptr,
+		stmt.conn.err.ptr,
+		uintptr(n),
+		0, 0, 0,
+		uintptr(mode),
+	))
 }
 
 // closeQuietly closes a statement owned by a failed one-off call, tracing any error.
@@ -232,7 +224,6 @@ func (stmt *Statement) closeQuietly() {
 
 // Query executes query statement
 func (stmt *Statement) Query(args []driver.Value) (driver.Rows, error) {
-	// fmt.Println("stmt.Query")
 	if err := stmt.SetPrefetch(PrefetchRows); err != nil {
 		return nil, err
 	}

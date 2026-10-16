@@ -114,7 +114,6 @@ func (conn *Conn) Prepare(query string) (driver.Stmt, error) {
 
 // Close closes connection
 func (conn *Conn) Close() error {
-	// trace.Println("conn.Close")
 	if !conn.opened {
 		return errors.New("already closed")
 	}
@@ -125,7 +124,6 @@ func (conn *Conn) Close() error {
 
 // Query implements driver.Queryer
 func (conn *ConnStd) Query(query string, args []driver.Value) (driver.Rows, error) {
-	// debug.PrintStack()
 	stmt, err := conn.newStatement(query)
 	if err != nil {
 		return nil, err
@@ -203,7 +201,14 @@ func (conn *Conn) logon(user, pass, host []byte) (err error) {
 	passLen := uintptr(len(pass))
 	hostLen := uintptr(len(host))
 
-	if err = conn.cerr(oci_OCILogon.Call(conn.env.ptr, conn.err.ptr, ref(&conn.serv.ptr), bufAddr(user), userLen, bufAddr(pass), passLen, bufAddr(host), hostLen)); err != nil {
+	if err = conn.cerr(oci_OCILogon.Call(
+		conn.env.ptr,
+		conn.err.ptr,
+		ref(&conn.serv.ptr),
+		bufAddr(user), userLen,
+		bufAddr(pass), passLen,
+		bufAddr(host), hostLen,
+	)); err != nil {
 		err = conn.getErr(OCI_HTYPE_ERROR)
 		conn.free()
 	} else {
@@ -226,43 +231,35 @@ func (conn *Conn) envErr(r uintptr, r2 uintptr, err error) error {
 // http://docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci17msc007.htm#LNOCI17287
 func (conn *Conn) onOCIReturn(code int16, htyp int) error {
 	switch code {
-	case OCI_SUCCESS:
-		return nil
-	case OCI_SUCCESS_WITH_INFO:
-		// trace.Println("Error: OCI_SUCCESS_WITH_INFO")
-		return nil
-	case OCI_NEED_DATA:
-		// trace.Println("Error: OCI_NEED_DATA")
+	case OCI_SUCCESS, OCI_SUCCESS_WITH_INFO, OCI_NEED_DATA, OCI_STILL_EXECUTING, OCI_CONTINUE:
 		return nil
 	case OCI_ERROR:
 		return conn.getErr(htyp)
 	case OCI_INVALID_HANDLE:
 		return errors.New("OCI call returned OCI_INVALID_HANDLE")
-	case OCI_STILL_EXECUTING:
-		//return fmt.Errorf("Error: OCI_STILL_EXECUTE")
-		return nil
-	case OCI_CONTINUE:
-		//fmt.Errorf("Error: OCI_CONTINUE")
-		return nil
 	default:
-		//fmt.Println("OCI:", conn.getErr(htyp))
+		return fmt.Errorf("OCI call returned - %d, %v", code, conn.getErr(htyp))
 	}
-
-	return fmt.Errorf("OCI call returned - %d, %v", code, conn.getErr(htyp))
 }
 
 // https://docs.oracle.com/database/121/LNOCI/oci17msc007.htm#LNOCI17287
 func (conn *Conn) getErr(htyp int) error {
 	buf := make([]byte, 3072) // OCI_ERROR_MAXMSG_SIZE2 3072
 	errcode := 0
-	if htyp == OCI_HTYPE_ERROR {
-		if err := conn.cerr(oci_OCIErrorGet.Call(conn.err.ptr, uintptr(1), uintptr(0), intRef(&errcode), bufAddr(buf), uintptr(len(buf)), OCI_HTYPE_ERROR)); err != nil {
-			return err
-		}
-	} else {
-		if err := conn.cerr(oci_OCIErrorGet.Call(conn.env.ptr, uintptr(1), uintptr(0), intRef(&errcode), bufAddr(buf), uintptr(len(buf)), OCI_HTYPE_ENV)); err != nil {
-			return err
-		}
+	ptr := conn.err.ptr
+	if htyp != OCI_HTYPE_ERROR {
+		ptr = conn.env.ptr
+	}
+	if err := conn.cerr(oci_OCIErrorGet.Call(
+		ptr,
+		uintptr(1),
+		uintptr(0),
+		intRef(&errcode),
+		bufAddr(buf),
+		uintptr(len(buf)),
+		uintptr(htyp),
+	)); err != nil {
+		return err
 	}
 
 	buf = buf[:bytes.IndexByte(buf, 0)]

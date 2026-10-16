@@ -10,10 +10,8 @@ import (
 // DriverName is name used to register driver
 const DriverName = "ora"
 
-var (
-	// trace = log.New(os.Stdout, "DEBUG:", log.Lshortfile)
-	trace = log.New(ioutil.Discard, "DEBUG:", log.Lshortfile)
-)
+// trace discards driver debug output; switch to log.New(os.Stdout, ...) to enable.
+var trace = log.New(ioutil.Discard, "DEBUG:", log.Lshortfile)
 
 func init() {
 	sql.Register(DriverName, Driver{})

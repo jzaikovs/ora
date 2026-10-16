@@ -14,16 +14,15 @@ type QueryResult struct {
 }
 
 func newQueryResult(rows *Rows, stmt driver.Stmt) *QueryResult {
-	qr := new(QueryResult)
-	qr.rows = rows
-	qr.stmt = stmt
-	qr.lastRow = make([]driver.Value, len(qr.rows.descriptors))
-	return qr
+	return &QueryResult{
+		rows:    rows,
+		stmt:    stmt,
+		lastRow: make([]driver.Value, len(rows.descriptors)),
+	}
 }
 
 // Next fetchers next binds in query result, returns sql.ErrNoRows when there are no more rows
 func (qr *QueryResult) Next() error {
-	// trace.Println("qr.Next")
 	qr.lastRow = make([]driver.Value, len(qr.rows.descriptors))
 	if err := qr.rows.Next(qr.lastRow); err != io.EOF {
 		return err
@@ -32,7 +31,6 @@ func (qr *QueryResult) Next() error {
 }
 
 func (qr *QueryResult) Close() (err error) {
-	// trace.Println("qr.Close")
 	return qr.rows.Close()
 }
 

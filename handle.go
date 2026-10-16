@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 )
 
-var handleRefCount int64 = 0
+var handleRefCount int64
 
 type ociHandle struct {
 	ptr uintptr

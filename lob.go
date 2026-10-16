@@ -81,7 +81,6 @@ func (lob *Lob) free() {
 
 func (lob *Lob) Write(buf []byte) (n int, err error) {
 	if err = lob.open(); err != nil {
-		fmt.Println("bad open")
 		return
 	}
 
