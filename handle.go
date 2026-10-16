@@ -21,8 +21,13 @@ func (conn *Conn) alloc(typ int) (*ociHandle, error) {
 }
 
 func (handle *ociHandle) free() {
+	// OCIHandleFree reports failures through its status, not the OS last-error value.
+	status, _, _ := oci_OCIHandleFree.Call(handle.ptr, uintptr(handle.typ))
+	if code := int16(status); code != OCI_SUCCESS {
+		trace.Printf("OCIHandleFree failed for type %d: OCI status %d", handle.typ, code)
+		return
+	}
 	atomic.AddInt64(&handleRefCount, -1)
-	oci_OCIHandleFree.Call(handle.ptr, uintptr(handle.typ))
 }
 
 func (handle *ociHandle) ref() uintptr {

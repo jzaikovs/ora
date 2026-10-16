@@ -8,7 +8,7 @@ import (
 )
 
 // convert from oracle date to time.Time
-//docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci03typ.htm#LNOCI16288
+// docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci03typ.htm#LNOCI16288
 func convertDateToGoTime(p []byte) time.Time {
 	year := int(p[0]-100)*100 + int(p[1]-100)
 	month := time.Month(int(p[2]))

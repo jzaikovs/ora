@@ -1,3 +1,6 @@
+//go:build ora_legacy_integration
+// +build ora_legacy_integration
+
 package ora
 
 import (
@@ -21,10 +24,10 @@ GRANT EXECUTE ON dbms_lock TO ora_go_test;
 */
 
 var (
-	dbUser              = "ORA_GO_TEST"
-	dbPassword          = "ora_go_test_password"
-	dbHost              = "//localhost:1521/XE"
-	testDBConnectString = fmt.Sprintf("%s/%s@%s", dbUser, dbPassword, dbHost)
+	dbUser              string
+	dbPassword          string
+	dbHost              string
+	testDBConnectString string
 	db                  *sql.DB
 )
 
@@ -59,16 +62,23 @@ func query(sql string, fn func(*sql.Rows) error, binds ...interface{}) (err erro
 }
 
 func TestMain(m *testing.M) {
-	// your func
-	var err error
+	config, err := loadLegacyTestConfig(".env")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	dbUser, dbPassword, dbHost = config.user, config.password, config.host
+	testDBConnectString = fmt.Sprintf("%s/%s@%s", dbUser, dbPassword, dbHost)
 	db, err = sql.Open("ora", testDBConnectString)
 	if err != nil {
-		fmt.Println(err)
-		return
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 
 	if err = setup(); err != nil {
-		fmt.Println(err)
+		fmt.Fprintln(os.Stderr, err)
+		db.Close()
+		os.Exit(1)
 	}
 
 	retCode := m.Run()

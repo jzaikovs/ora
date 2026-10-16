@@ -1,6 +1,7 @@
 package ora
 
 import (
+	"context"
 	"database/sql/driver"
 	"fmt"
 	"io"
@@ -8,6 +9,8 @@ import (
 
 // Rows implements handling query result from database
 type Rows struct {
+	ctx         context.Context
+	closed      bool
 	conn        *Conn
 	stmt        *Statement
 	columns     []string
@@ -23,10 +26,16 @@ func newRows(stmt *Statement) (*Rows, error) {
 
 	// http://web.stanford.edu/dept/itss/docs/oracle/10gR2/appdev.102/b14250/oci04sql.htm#sthref629
 
-	d, err := newDescriptor(stmt, 1)
-	for err == nil {
+	var count uint32
+	if err := stmt.conn.cerr(oci_OCIAttrGet.Call(stmt.ptr, OCI_HTYPE_STMT, uint32Ref(&count), 0, OCI_ATTR_PARAM_COUNT, stmt.conn.err.ptr)); err != nil {
+		return nil, err
+	}
+	for pos := 1; pos <= int(count); pos++ {
+		d, err := newDescriptor(stmt, pos)
+		if err != nil {
+			return nil, err
+		}
 		columns = append(columns, d.name)
-		pos := len(descriptors) + 1
 		switch d.typ {
 		case OCI_TYP_ROWID:
 			buf := make([]byte, 18) // rowid at most is 18 bytes long
@@ -34,7 +43,8 @@ func newRows(stmt *Statement) (*Rows, error) {
 		case OCI_TYP_VARCHAR, OCI_TYP_CHAR:
 			// oracle doesn't return correct size
 			// if client side encoding uses more bytes than server side to encode single character
-			buf := make([]byte, d.length*2+2) // make buffer where result is stored + null byte
+			// up to 4 client bytes per server byte (UTF-8), + null byte; scan rejects truncation
+			buf := make([]byte, d.length*4+2)
 			err = d.define(pos, buf, len(buf), SQLT_STR)
 		case OCI_TYP_LONG:
 			buf := make([]byte, MaxLongSize)
@@ -67,7 +77,6 @@ func newRows(stmt *Statement) (*Rows, error) {
 		}
 
 		descriptors = append(descriptors, d)
-		d, err = newDescriptor(stmt, len(descriptors)+1)
 	}
 
 	return &Rows{conn: stmt.conn, stmt: stmt, columns: columns, descriptors: descriptors}, nil
@@ -75,6 +84,16 @@ func newRows(stmt *Statement) (*Rows, error) {
 
 // Next fetches rows from database and stores in destination slice
 func (rows *Rows) Next(dest []driver.Value) (err error) {
+	if rows.closed {
+		return io.EOF
+	}
+	if rows.ctx != nil {
+		return rows.conn.runContext(rows.ctx, func() error { return rows.next(dest) })
+	}
+	return rows.next(dest)
+}
+
+func (rows *Rows) next(dest []driver.Value) (err error) {
 	// trace.Println("rows.Next")
 	// 1. fetch result in result binds,
 	// TODO: manipulate fetch_size - prefetch
@@ -97,34 +116,27 @@ func (rows *Rows) Next(dest []driver.Value) (err error) {
 
 func (rows *Rows) scan(dest []driver.Value) error {
 	for i, d := range rows.descriptors {
+		if d.ind == -1 {
+			dest[i] = nil
+			continue
+		}
+		if d.ind != 0 {
+			return fmt.Errorf("ora: truncated column %d", i+1)
+		}
 		switch d.typ {
 		case OCI_TYP_ROWID:
 			dest[i] = string(d.valPtr.([]byte))
 		case OCI_TYP_VARCHAR, OCI_TYP_CHAR, OCI_TYP_LONG:
-			if d.ind != 0 {
-				dest[i] = "" //  null string in oracle is empty string
-				break
-			}
 			buf := d.valPtr.([]byte)
 			dest[i] = string(buf[:d.rlen])
 		case OCI_TYP_CLOB, OCI_TYP_BLOB:
 			lob := d.valPtr.(*Lob)
-			lob.reset(d.ind == 0)
+			lob.reset(true) // non-NULL: NULL returned nil above
 			dest[i] = lob
 		case OCI_TYP_NUMBER:
-			if d.ind != 0 {
-				dest[i] = nil
-				break
-			}
-
 			v := d.valPtr.([]byte)
 			dest[i] = convertNumberToString(v[1 : int(v[0])+1])
 		case OCI_TYP_DATE:
-			if d.ind != 0 {
-				dest[i] = nil
-				break
-			}
-
 			p := d.valPtr.([]byte)
 			dest[i] = convertDateToGoTime(p)
 		}
@@ -149,8 +161,12 @@ func (rows *Rows) ColumnTypePrecisionScale(index int) (precision, scale int64, o
 
 // Close closes statement if rows own it, prepared statements stay open for reuse
 func (rows *Rows) Close() error {
+	if rows.closed {
+		return nil
+	}
+	rows.closed = true
 	// trace.Println("rows.Close")
-	if !rows.ownsStmt {
+	if !rows.ownsStmt || rows.stmt.closed {
 		return nil
 	}
 	return rows.stmt.Close()

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 )
 
 // Conn represents single connection with database
@@ -13,6 +14,8 @@ type Conn struct {
 	env        *ociHandle
 	serv       *ociHandle
 	err        *ociHandle
+	breakErr   *ociHandle
+	bad        bool
 	tx         *Transaction
 	opened     bool
 	statements map[int]*Statement
@@ -25,31 +28,43 @@ func newConnection() (*Conn, error) {
 	conn.env = &ociHandle{typ: OCI_HTYPE_ENV}
 	conn.statements = make(map[int]*Statement)
 
-	// TODO: OCI_THREADED
-	err := conn.envErr(oci_OCIEnvCreate.Call(conn.env.ref(), OCI_DEFAULT, 0, 0, 0, 0, 0, 0))
+	err := conn.envErr(oci_OCIEnvCreate.Call(conn.env.ref(), OCI_THREADED, 0, 0, 0, 0, 0, 0))
 	if err != nil {
 		return nil, err
 	}
+	atomic.AddInt64(&handleRefCount, 1)
 
-	if conn.serv, err = conn.alloc(OCI_HTYPE_SVCCTX); err != nil {
-		conn.env.free()
-		return nil, err
-	}
+	// OCILogon allocates its service context; OCILogoff releases it.
+	conn.serv = &ociHandle{typ: OCI_HTYPE_SVCCTX}
 
 	if conn.err, err = conn.alloc(OCI_HTYPE_ERROR); err != nil {
-		conn.serv.free()
 		conn.env.free()
 		return nil, err
 	}
 
+	if conn.breakErr, err = conn.alloc(OCI_HTYPE_ERROR); err != nil {
+		conn.err.free()
+		conn.env.free()
+		return nil, err
+	}
 	return conn, nil
 }
 
 // Begin begins transaction
 func (conn *Conn) Begin() (driver.Tx, error) {
-	err := conn.cerr(oci_OCITransStart.Call(conn.serv.ptr, conn.err.ptr, 600, 1))
+	return conn.begin(OCI_TRANS_NEW)
+}
+
+func (conn *Conn) begin(mode int) (driver.Tx, error) {
+	if conn.tx != nil {
+		return nil, errors.New("ora: transaction already active")
+	}
+	err := conn.cerr(oci_OCITransStart.Call(conn.serv.ptr, conn.err.ptr, 600, uintptr(mode)))
+	if err != nil {
+		return nil, err
+	}
 	conn.tx = &Transaction{conn}
-	return conn.tx, err
+	return conn.tx, nil
 }
 
 // Exec implements driver.Execer
@@ -59,11 +74,7 @@ func (conn *Conn) Exec(query string, args []driver.Value) (driver.Result, error)
 		return nil, err
 	}
 
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			trace.Println(err)
-		}
-	}()
+	defer stmt.closeQuietly()
 
 	return stmt.Exec(args)
 }
@@ -94,6 +105,7 @@ func (conn *ConnStd) Query(query string, args []driver.Value) (driver.Rows, erro
 
 	rows, err := stmt.Query(args)
 	if err != nil {
+		stmt.closeQuietly()
 		return nil, err
 	}
 
@@ -115,6 +127,7 @@ func (conn *Conn) Query(query string, binds ...interface{}) (qr *QueryResult, er
 
 	rows, err := stmt.Query(values)
 	if err != nil {
+		stmt.closeQuietly()
 		trace.Println(err)
 		return nil, err
 	}
@@ -130,12 +143,25 @@ func (conn *Conn) free() {
 		}
 	}
 
-	if err := conn.cerr(oci_OCILogoff.Call(conn.serv.ptr, conn.err.ptr)); err != nil {
-		trace.Println(err)
+	if conn.opened {
+		// OCILogoff commits an outstanding transaction, so roll back first when
+		// a transaction may still be open (explicit or interrupted).
+		if conn.tx != nil || conn.bad {
+			if err := conn.cerr(oci_OCITransRollback.Call(conn.serv.ptr, conn.err.ptr, OCI_DEFAULT)); err != nil {
+				trace.Println(err)
+			}
+			conn.tx = nil
+		}
+		if err := conn.cerr(oci_OCILogoff.Call(conn.serv.ptr, conn.err.ptr)); err != nil {
+			trace.Println(err)
+		}
+		atomic.AddInt64(&handleRefCount, -1)
+		conn.serv.ptr = 0
 	}
 
 	conn.statements = make(map[int]*Statement)
-	conn.serv.free()
+	conn.err.free()
+	conn.breakErr.free()
 	conn.env.free()
 	conn.opened = false
 }
@@ -150,6 +176,7 @@ func (conn *Conn) logon(user, pass, host []byte) (err error) {
 		conn.free()
 	} else {
 		conn.opened = true
+		atomic.AddInt64(&handleRefCount, 1)
 	}
 	return
 }

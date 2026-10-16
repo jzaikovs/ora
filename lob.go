@@ -170,6 +170,9 @@ func (lob *Lob) String() (string, error) {
 
 func (lob *Lob) Scan(src interface{}) (err error) {
 	switch v := src.(type) {
+	case nil:
+		// NULL LOB column: an empty reader whose Read returns io.EOF.
+		lob.reset(false)
 	case *string:
 		*v, err = lob.String()
 	case *Lob:

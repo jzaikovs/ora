@@ -1,8 +1,10 @@
 package ora
 
 const (
-	OCI_DEFAULT  = 0
-	OCI_THREADED = 1
+	OCI_DEFAULT        = 0
+	OCI_THREADED       = 1
+	OCI_TRANS_NEW      = 0x00000001
+	OCI_TRANS_READONLY = 0x00000100
 )
 
 // http://docs.oracle.com/cd/E11882_01/appdev.112/e10646/oci02bas.htm#g466063
@@ -46,6 +48,7 @@ const (
 	OCI_ATTR_PRECISION     = 5
 	OCI_ATTR_SCALE         = 6
 	OCI_ATTR_ROW_COUNT     = 9
+	OCI_ATTR_PARAM_COUNT   = 18
 	OCI_ATTR_PREFETCH_ROWS = 11
 	OCI_ATTR_ROWID         = 19
 	OCI_ATTR_FETCH_ROWID   = 448
@@ -157,7 +160,6 @@ var (
 	oci_OCILogon              = ociLibrary.NewProc("OCILogon")
 	oci_OCIParamGet           = ociLibrary.NewProc("OCIParamGet")
 	oci_OCIPing               = ociLibrary.NewProc("OCIPing")
-	oci_OCIReset              = ociLibrary.NewProc("OCIReset")
 	oci_OCIStmtExecute        = ociLibrary.NewProc("OCIStmtExecute")
 	oci_OCIStmtFetch2         = ociLibrary.NewProc("OCIStmtFetch2")
 	oci_OCIStmtPrepare2       = ociLibrary.NewProc("OCIStmtPrepare2") // this allows statement caching

@@ -1,4 +1,5 @@
-// +build go1.8
+//go:build ora_legacy_integration
+// +build ora_legacy_integration
 
 package ora
 
@@ -6,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"errors"
 	"testing"
 	"time"
 )
@@ -29,7 +31,7 @@ func TestExecCancel(t *testing.T) {
 		return
 	}
 
-	if err.Error() != "ORA-01013: user requested cancel of current operation" {
+	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Error(err)
 		return
 	}

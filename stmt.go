@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 )
 
@@ -18,7 +19,6 @@ type Statement struct {
 	*ociHandle
 	id     int
 	conn   *Conn
-	tx     *Transaction
 	binds  []interface{} // will hold pointers to every bind variable
 	closed bool
 	rows   *Rows
@@ -26,27 +26,26 @@ type Statement struct {
 
 // newStatement allocates new statement
 func (conn *Conn) newStatement(query string) (stmt *Statement, err error) {
-	var h *ociHandle
-	// allocate prepare statement, later we will need to free it
-	if h, err = conn.alloc(OCI_HTYPE_STMT); err != nil {
-		return nil, err
-	}
+	// OCIStmtPrepare2 owns allocation; release only with OCIStmtRelease.
+	h := &ociHandle{typ: OCI_HTYPE_STMT}
 
 	conn.lastStmtID++
 	stmt = &Statement{
 		conn:      conn,
-		tx:        conn.tx,
 		ociHandle: h,
 		id:        conn.lastStmtID,
 	}
 
-	conn.statements[stmt.id] = stmt
-
 	if err = stmt.prepare(query); err != nil {
-		if err2 := stmt.Close(); err2 != nil {
-			return nil, err2
+		if stmt.ptr != 0 {
+			if releaseErr := conn.cerr(oci_OCIStmtRelease.Call(stmt.ptr, conn.err.ptr, 0, 0, OCI_DEFAULT)); releaseErr != nil {
+				trace.Println(releaseErr)
+			}
 		}
+		return nil, err
 	}
+	atomic.AddInt64(&handleRefCount, 1)
+	conn.statements[stmt.id] = stmt
 
 	return
 }
@@ -70,7 +69,8 @@ func (stmt *Statement) close() error {
 
 	stmt.closed = true
 	err := stmt.conn.cerr(oci_OCIStmtRelease.Call(stmt.ptr, stmt.conn.err.ptr, 0, 0, OCI_DEFAULT))
-	stmt.free()
+	atomic.AddInt64(&handleRefCount, -1)
+	stmt.ptr = 0
 	return err
 }
 
@@ -197,9 +197,7 @@ func (stmt *Statement) bind(args []driver.Value) (err error) {
 		}
 
 		if err != nil {
-			if err2 := stmt.Close(); err2 != nil {
-				trace.Println(err)
-			}
+			// Callers that own the statement close it; prepared statements stay reusable.
 			return
 		}
 	}
@@ -214,17 +212,22 @@ func (stmt *Statement) bindPyPos(i int, bnd *uintptr, addr uintptr, size int, ty
 func (stmt *Statement) exec(n int) (err error) {
 	mode := OCI_DEFAULT // default will fetch n rows return describe, we do it only before first fetch when call define
 
-	if stmt.tx == nil {
+	if stmt.conn.tx == nil {
 		mode = OCI_COMMIT_ON_SUCCESS
 	}
 
-	if err = stmt.conn.cerr(oci_OCIStmtExecute.Call(stmt.conn.serv.ptr, stmt.ptr, stmt.conn.err.ptr, uintptr(n), 0, 0, 0, uintptr(mode))); err != nil {
-		if err2 := stmt.Close(); err2 != nil {
-			trace.Println(err)
-		}
-	}
+	// A failed execute leaves the statement usable; owners close it.
+	return stmt.conn.cerr(oci_OCIStmtExecute.Call(stmt.conn.serv.ptr, stmt.ptr, stmt.conn.err.ptr, uintptr(n), 0, 0, 0, uintptr(mode)))
+}
 
-	return
+// closeQuietly closes a statement owned by a failed one-off call, tracing any error.
+func (stmt *Statement) closeQuietly() {
+	if stmt.closed {
+		return
+	}
+	if err := stmt.Close(); err != nil {
+		trace.Println(err)
+	}
 }
 
 // Query executes query statement

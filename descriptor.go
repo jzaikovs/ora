@@ -12,8 +12,8 @@ type Descriptor struct {
 	typ         int
 	name        string
 	length      int
-	rlen        int // offset if fetching large objects
-	ind         int // indicator, used to determin if result is null value
+	rlen        uint16 // OCI ub2 returned length
+	ind         int16  // OCI sb2: -1 NULL, positive/-2 truncated
 	prec        int
 	scale       int
 	displaySize int
@@ -76,10 +76,10 @@ func (descriptor *Descriptor) getName() (name string, err error) {
 
 func (descriptor *Descriptor) define(pos int, addr interface{}, size int, typ int) error {
 	if ptr, ok := addr.(uintptr); ok {
-		return descriptor.stmt.conn.cerr(oci_OCIDefineByPos.Call(descriptor.stmt.ptr, descriptor.ref(), descriptor.stmt.conn.err.ptr, uintptr(pos), ptr, uintptr(size), uintptr(typ), intRef(&descriptor.ind), intRef(&descriptor.rlen), 0, 0))
+		return descriptor.stmt.conn.cerr(oci_OCIDefineByPos.Call(descriptor.stmt.ptr, descriptor.ref(), descriptor.stmt.conn.err.ptr, uintptr(pos), ptr, uintptr(size), uintptr(typ), int16Ref(&descriptor.ind), uint16Ref(&descriptor.rlen), 0, 0))
 	}
 
 	descriptor.valPtr = addr
 	ptr := reflect.ValueOf(descriptor.valPtr).Pointer()
-	return descriptor.stmt.conn.cerr(oci_OCIDefineByPos.Call(descriptor.stmt.ptr, descriptor.ref(), descriptor.stmt.conn.err.ptr, uintptr(pos), ptr, uintptr(size), uintptr(typ), intRef(&descriptor.ind), intRef(&descriptor.rlen), 0, 0))
+	return descriptor.stmt.conn.cerr(oci_OCIDefineByPos.Call(descriptor.stmt.ptr, descriptor.ref(), descriptor.stmt.conn.err.ptr, uintptr(pos), ptr, uintptr(size), uintptr(typ), int16Ref(&descriptor.ind), uint16Ref(&descriptor.rlen), 0, 0))
 }

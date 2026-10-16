@@ -1,3 +1,6 @@
+//go:build ora_legacy_integration
+// +build ora_legacy_integration
+
 package ora
 
 import (

@@ -8,6 +8,18 @@ const null = uintptr(0)
 
 const sizeOfInt = int(unsafe.Sizeof(int(0)))
 
+func int16Ref(p *int16) uintptr {
+	return uintptr(unsafe.Pointer(p))
+}
+
+func uint16Ref(p *uint16) uintptr {
+	return uintptr(unsafe.Pointer(p))
+}
+
+func uint32Ref(p *uint32) uintptr {
+	return uintptr(unsafe.Pointer(p))
+}
+
 func intRef(p *int) uintptr {
 	return uintptr(unsafe.Pointer(p))
 }
